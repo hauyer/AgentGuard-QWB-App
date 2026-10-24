@@ -50,13 +50,25 @@ def test_graph_demo_accepts_request_id() -> None:
     assert len(payload["graph"]["nodes"]) == 8
 
 
-def test_graph_live_reports_capability_unavailable(stub_base_url_warden_available: str) -> None:
+def test_graph_live_without_request_id_rejected(stub_base_url_warden_available: str) -> None:
+    """B13: the C1 graph capability is published, so live mode requires a
+    request_id instead of a blanket 503."""
     client = _client(stub_base_url_warden_available)
     response = client.get("/api/interaction-graph")
-    assert response.status_code == 503
+    assert response.status_code == 422
     detail = response.json()["detail"]
-    assert detail["error"] == "GRAPH_API_UNAVAILABLE"
-    assert "QWB-INT-001" in detail["message"]
+    assert detail["error"] == "REQUEST_ID_REQUIRED"
+
+
+def test_graph_live_reports_upstream_no_data_honestly(stub_base_url_warden_available: str) -> None:
+    """A workflow without message metadata gets an honest empty graph, not a
+    fabricated one (upstream available=false is surfaced verbatim)."""
+    client = _client(stub_base_url_warden_available)
+    payload = client.get("/api/interaction-graph", params={"request_id": "inv-stub-0001"}).json()
+    assert payload["meta"]["capability"] == "upstream_no_data"
+    assert payload["graph"]["available"] is False
+    assert payload["graph"]["nodes"] == []
+    assert payload["meta"]["limitations"]
 
 
 def test_graph_unavailable_without_demo() -> None:

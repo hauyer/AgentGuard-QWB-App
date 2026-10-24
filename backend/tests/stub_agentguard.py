@@ -86,7 +86,7 @@ def create_stub_app(
     state = {"kernel_status": kernel_status, "warden_available": warden_available}
     # request_ids the stub will acknowledge as existing (B11 contract fidelity:
     # GET on an unknown id must 404, matching the real AgentGuard service)
-    known_investigations: set[str] = {"inv-stub-0001"}
+    known_investigations: set[str] = {"inv-stub-0001", "inv-stub-graph-0002"}
 
     @app.get("/v1/system/health")
     def health() -> dict:
@@ -185,6 +185,105 @@ def create_stub_app(
             "result": {"status": "completed"},
             "error_code": None,
             "error_message": None,
+        }
+
+    @app.get("/v1/investigations/{request_id}/interaction-graph")
+    def interaction_graph(request_id: str) -> dict:
+        """C1 contract: the response self-describes availability. The stub can
+        serve an empty (honest) graph or a small populated one depending on the
+        workflow id, mirroring both real upstream states."""
+        if request_id not in known_investigations:
+            raise HTTPException(status_code=404,
+                                detail={"error": "NOT_FOUND", "message": "unknown workflow"})
+        if request_id == "inv-stub-graph-0002":
+            return {
+                "schema_version": "1.0",
+                "request_id": request_id,
+                "available": True,
+                "data_status": "available",
+                "source": "warden_message_metadata",
+                "run_id": "run-stub-0002",
+                "scenario_id": "scenario-stub",
+                "nodes": [
+                    {"node_id": "agent-a", "node_type": "agent"},
+                    {"node_id": "tool-1", "node_type": "tool"},
+                    {"node_id": "agent-b", "node_type": "agent"},
+                ],
+                "edges": [
+                    {"source": "agent-a", "target": "tool-1", "event_type": "tool_call",
+                     "message_id": "msg-0001", "evidence_refs": ["ev-stub-000000000001"]},
+                    {"source": "tool-1", "target": "agent-b", "event_type": "tool_result",
+                     "message_id": "msg-0002", "evidence_refs": []},
+                ],
+                "candidate_paths": [{"nodes": ["agent-a", "tool-1", "agent-b"], "score": 0.42}],
+                "limitations": ["Stub graph: synthetic edges from message metadata."],
+            }
+        return {
+            "schema_version": "1.0",
+            "request_id": request_id,
+            "available": False,
+            "data_status": "unavailable",
+            "source": "none",
+            "run_id": None,
+            "scenario_id": "scenario-stub",
+            "nodes": [],
+            "edges": [],
+            "candidate_paths": [],
+            "limitations": [
+                "GRAPH_SOURCE_UNAVAILABLE: no authorized message-level metadata is recorded "
+                "for this workflow; no edges were constructed."
+            ],
+        }
+
+    @app.get("/v1/experiments")
+    def list_experiments_index(limit: int = 50, offset: int = 0) -> dict:
+        items = [
+            {
+                "schema_version": "1.0",
+                "experiment_id": "exp-stub-0001",
+                "run_id": "run-stub-0001",
+                "scenario_id": "scenario-stub",
+                "execution_status": "completed",
+                "raw_status": "completed",
+                "data_source": "synthetic_report",
+                "evidence_level": "synthetic",
+                "metrics_available": False,
+            },
+            {
+                "schema_version": "1.0",
+                "experiment_id": "exp-stub-0002",
+                "run_id": "run-stub-0002",
+                "scenario_id": "scenario-stub",
+                "execution_status": "completed",
+                "raw_status": "completed",
+                "data_source": "synthetic_report",
+                "evidence_level": "synthetic",
+                "metrics_available": True,
+            },
+        ]
+        return {"schema_version": "1.0", "items": items, "count": len(items),
+                "offset": offset, "limit": limit, "next_offset": None}
+
+    @app.post("/v1/experiments/compare")
+    def compare_experiments(body: dict) -> dict:
+        run_ids = body.get("run_ids") or []
+        return {
+            "schema_version": "1.0",
+            "run_ids": run_ids,
+            "comparison": {"note": "Stub comparison; metrics are synthetic."},
+        }
+
+    @app.get("/v1/runs/{run_id}/timeline")
+    def run_timeline(run_id: str) -> dict:
+        if run_id != "run-stub-0001":
+            raise HTTPException(status_code=404, detail="run_id not found")
+        return {
+            "run_id": run_id,
+            "events": [
+                {"event_type": "plan_submitted", "at": datetime.now(UTC).isoformat(),
+                 "message": "plan submitted to WARDEN"},
+                {"event_type": "run_started", "at": datetime.now(UTC).isoformat()},
+            ],
         }
 
     @app.get("/v1/evidence/investigations/{request_id}")

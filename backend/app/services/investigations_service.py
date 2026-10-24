@@ -177,6 +177,9 @@ def get_investigation(
     raise InvestigationServiceError(503, "API_UNAVAILABLE", "AgentGuard 不可达且未启用演示模式")
 
 
+RUN_TIMELINE_OPERATION = "GET /v1/runs/{run_id}/timeline"
+
+
 def get_timeline(
     client: AgentGuardClient, demo: DemoService, *, mode_override: str | None, request_id: str
 ) -> tuple[list[dict], dict]:
@@ -186,10 +189,52 @@ def get_timeline(
             detail = client.get_investigation(request_id)
         except AgentGuardError as exc:
             raise _to_service_error(exc) from exc
-        return _derive_timeline(detail), {"data_mode": "live"}
+        run_id = detail.get("run_id")
+        operations = client.discover_operations()
+        if run_id and operations.get(RUN_TIMELINE_OPERATION):
+            # Persisted upstream events take precedence over state-derived steps;
+            # fall back to the derived view (clearly labelled) only when the
+            # upstream has no timeline for this run yet.
+            try:
+                payload = client.get_run_timeline(run_id)
+                events = _normalize_run_timeline(payload, run_id)
+                return events, {"data_mode": "live", "timeline_source": "upstream", "run_id": run_id}
+            except AgentGuardError as exc:
+                if exc.status_code == 404:
+                    return (_derive_timeline(detail),
+                            {"data_mode": "live", "timeline_source": "derived",
+                             "derived_reason": f"上游尚无 run {run_id} 的时间线（404）"})
+                raise _to_service_error(exc) from exc
+        reason = ("调查尚未产生 run_id（preflight blocked）" if not run_id
+                  else "AgentGuard pinned 版本未发布 run 时间线接口")
+        return (_derive_timeline(detail),
+                {"data_mode": "live", "timeline_source": "derived", "derived_reason": reason})
     if mode in (DataMode.RECORDED, DataMode.SYNTHETIC):
         return demo.get_timeline(request_id), demo.meta_for("timeline.json")
     raise InvestigationServiceError(503, "API_UNAVAILABLE", "AgentGuard 不可达且未启用演示模式")
+
+
+def _normalize_run_timeline(payload: dict, run_id: str) -> list[dict]:
+    """Map upstream run timeline events to the app timeline shape verbatim.
+
+    Unknown event kinds stay as-is (raw_status preserved); nothing is inferred
+    from state that the upstream did not report.
+    """
+    raw_events = payload.get("events", payload.get("items", []))
+    if not isinstance(raw_events, list):
+        raise AgentGuardError(502, "API_BAD_RESPONSE", "run timeline response has invalid events")
+    events: list[dict] = []
+    for item in raw_events:
+        if not isinstance(item, dict):
+            continue
+        events.append({
+            "step": str(item.get("event_type") or item.get("step") or "event"),
+            "label": str(item.get("label") or item.get("event_type") or "事件"),
+            "status": "completed" if item.get("status") in (None, "completed") else str(item.get("status")),
+            "at": item.get("at") or item.get("created_at"),
+            "detail": item.get("detail") or item.get("message"),
+        })
+    return events
 
 
 def list_scenarios(

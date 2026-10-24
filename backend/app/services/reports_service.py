@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 MAX_PDF_BYTES = 4 * 1024 * 1024
 
+EXPERIMENTS_OPERATION = "GET /v1/experiments"
+COMPARE_OPERATION = "POST /v1/experiments/compare"
+
 
 def _esc(value: object) -> str:
     """Escape a field for reportlab's mini-HTML parser.
@@ -60,14 +63,85 @@ def list_experiments(
 ) -> tuple[dict, dict]:
     mode = effective_data_mode(mode_override, _agentguard_reachable(client))
     if mode == DataMode.LIVE:
-        raise ReportsServiceError(
-            503,
-            "EXPERIMENTS_UNAVAILABLE",
-            "AgentGuard 公共 API 未提供实验对比列表（仅支持单报告读取）；不虚构趋势数据。",
-        )
+        # C2 read-only experiment index (published at pinned 907aa19). Items
+        # carry data_source/evidence_level/metrics_available verbatim - the BFF
+        # never invents metrics when upstream reports metrics_available=false.
+        operations = client.discover_operations()
+        if not operations.get(EXPERIMENTS_OPERATION):
+            raise ReportsServiceError(
+                503, "EXPERIMENTS_UNAVAILABLE",
+                "AgentGuard pinned 版本未发布实验索引接口（GET /v1/experiments）；"
+                "不虚构趋势数据（QWB-INT-006）。")
+        try:
+            payload = client.list_experiments()
+        except AgentGuardError as exc:
+            raise _to_service_error(exc) from exc
+        return payload, {
+            "data_mode": "live",
+            "capability": "available",
+            "source_note": "实验列表来自 AgentGuard C2 只读实验索引；metrics_available=false 的条目不含指标。",
+        }
     if mode in (DataMode.RECORDED, DataMode.SYNTHETIC):
         return demo.list_experiments(), demo.meta_for("experiments.json")
     raise ReportsServiceError(503, "API_UNAVAILABLE", "AgentGuard 不可达且未启用演示模式")
+
+
+def compare_experiments(
+    client: AgentGuardClient,
+    demo: DemoService,
+    *,
+    mode_override: str | None,
+    run_ids: list[str],
+) -> tuple[dict, dict]:
+    """Controlled comparison. Comparability is checked before any delta is
+    computed: same scenario, metrics actually available, and synthetic runs are
+    never mixed into a series with non-synthetic evidence. Incomparable input
+    returns the reason instead of a fabricated improvement rate."""
+    if len(run_ids) < 2:
+        raise ReportsServiceError(422, "COMPARISON_NEEDS_TWO", "实验对比至少需要两个 run_id")
+    mode = effective_data_mode(mode_override, _agentguard_reachable(client))
+    if mode != DataMode.LIVE:
+        raise ReportsServiceError(
+            503, "COMPARISON_LIVE_ONLY",
+            "实验对比仅在 Live 模式可用；演示数据不参与对比统计。")
+    operations = client.discover_operations()
+    if not operations.get(COMPARE_OPERATION):
+        raise ReportsServiceError(
+            503, "COMPARISON_UNAVAILABLE",
+            "AgentGuard pinned 版本未发布实验对比接口（POST /v1/experiments/compare）。")
+    try:
+        index = client.list_experiments(limit=200)
+        items = {item.get("run_id"): item for item in index.get("items", []) if item.get("run_id")}
+        missing = [run_id for run_id in run_ids if run_id not in items]
+        if missing:
+            raise ReportsServiceError(422, "RUN_NOT_INDEXED",
+                                      f"以下 run_id 不在实验索引中：{missing}")
+        entries = [items[run_id] for run_id in run_ids]
+        scenarios = {item.get("scenario_id") for item in entries}
+        evidence_levels = {item.get("evidence_level") for item in entries}
+        issues: list[str] = []
+        if len(scenarios) > 1:
+            issues.append(f"场景不一致: {sorted(str(s) for s in scenarios)}")
+        no_metrics = [item.get("run_id") for item in entries if not item.get("metrics_available")]
+        if no_metrics:
+            issues.append(f"以下 run 无可用指标（metrics_available=false）: {no_metrics}")
+        if "synthetic" in evidence_levels and evidence_levels != {"synthetic"}:
+            issues.append(f"合成数据与真实证据混入同一对比系列: {sorted(str(e) for e in evidence_levels)}")
+        if issues:
+            return {
+                "comparable": False,
+                "reasons": issues,
+                "entries": [{k: item.get(k) for k in
+                             ("run_id", "experiment_id", "scenario_id", "evidence_level",
+                              "data_source", "metrics_available", "execution_status")}
+                            for item in entries],
+            }, {"data_mode": "live", "capability": "available"}
+        payload = client.compare_experiments(run_ids)
+        return {"comparable": True, **payload}, {"data_mode": "live", "capability": "available"}
+    except AgentGuardError as exc:
+        raise _to_service_error(exc) from exc
+    except ReportsServiceError:
+        raise
 
 
 def get_report(

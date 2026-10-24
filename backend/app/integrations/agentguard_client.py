@@ -71,6 +71,8 @@ class AgentGuardClient:
         self._settings = settings or get_settings()
         self._base_url = self._settings.agentguard_base_url
         self._timeout = self._settings.agentguard_api_timeout
+        self._discovered: dict[str, bool] | None = None
+        self._discovery_error: str | None = None
         # trust_env=False (B9): ignore ambient HTTP(S)_PROXY / system proxy
         # settings. The upstream origin is fixed server-side and normally
         # direct; routing it through an uncontrolled proxy would expose the
@@ -279,6 +281,77 @@ class AgentGuardClient:
             query={"limit": limit, "offset": offset},
             operator=True,
         )
+
+    # ------------------------------------------------------------------ #
+    # C1/C2 capabilities (published at pinned commit 907aa19; guarded by
+    # capability discovery so older pinned upstreams degrade explicitly)
+    # ------------------------------------------------------------------ #
+    def get_interaction_graph(self, request_id: str) -> dict[str, Any]:
+        """C1 message-level interaction graph. The response self-describes
+        availability: available=false with limitations[] is an honest upstream
+        answer, not an error."""
+        return self.request("GET", f"/v1/investigations/{_quote(request_id)}/interaction-graph")
+
+    def list_experiments(self, *, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        """C2 read-only experiment index."""
+        return self.request(
+            "GET", "/v1/experiments",
+            query={"limit": limit, "offset": offset},
+        )
+
+    def get_experiment(self, experiment_id: str) -> dict[str, Any]:
+        return self.request("GET", f"/v1/experiments/{_quote(experiment_id)}")
+
+    def compare_experiments(self, run_ids: list[str]) -> dict[str, Any]:
+        """C2 controlled comparison; the upstream contract requires run_ids."""
+        return self.request("POST", "/v1/experiments/compare", body={"run_ids": run_ids})
+
+    def get_run_timeline(self, run_id: str) -> dict[str, Any]:
+        return self.request("GET", f"/v1/runs/{_quote(run_id)}/timeline")
+
+    # ------------------------------------------------------------------ #
+    # capability discovery
+    # ------------------------------------------------------------------ #
+    def discover_operations(self) -> dict[str, bool]:
+        """Fetch /openapi.json once and record which tracked operations exist.
+
+        Result is cached per client instance; `unknown` values stay False with
+        the discovery failure recorded in last_discovery_error so callers can
+        distinguish "not published" from "discovery failed".
+        """
+        if self._discovered is not None:
+            return self._discovered
+        tracked = [
+            "GET /v1/investigations/{request_id}/interaction-graph",
+            "GET /v1/experiments",
+            "GET /v1/experiments/{experiment_id}",
+            "POST /v1/experiments/compare",
+            "GET /v1/runs/{run_id}/timeline",
+            "GET /v1/system/readiness",
+            "GET /v1/investigations/options",
+            "GET /v1/reports",
+        ]
+        try:
+            response = self._http.get("/openapi.json")
+            raw = response.content
+            if len(raw) > MAX_RESPONSE_BYTES:
+                raise ValueError("openapi payload too large")
+            import json
+
+            paths = json.loads(raw.decode("utf-8")).get("paths", {})
+            actual = {f"{method.upper()} {path}" for path, ops in paths.items() for method in ops}
+            self._discovered = {op: op in actual for op in tracked}
+            self._discovery_error = None
+        except Exception as exc:  # noqa: BLE001 - discovery must never break a request
+            self._discovered = {op: False for op in tracked}
+            self._discovery_error = f"{type(exc).__name__}"
+            logger.warning("capability discovery failed (%s); tracked ops default to unpublished",
+                           type(exc).__name__)
+        return self._discovered
+
+    @property
+    def discovery_error(self) -> str | None:
+        return self._discovery_error
 
 
 class _TransientStatus(AgentGuardError):

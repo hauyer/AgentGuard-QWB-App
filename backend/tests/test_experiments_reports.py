@@ -48,13 +48,25 @@ def test_experiments_demo_serves_fixture() -> None:
     assert item["result_source"].startswith("recorded:")
 
 
-def test_experiments_live_explicitly_unavailable(stub_base_url_warden_available: str) -> None:
+def test_experiments_live_uses_published_index(stub_base_url_warden_available: str) -> None:
+    """B13: the C2 experiment index is published on the pinned upstream, so
+    live mode serves the real list (with metrics_available verbatim) instead of
+    the previous blanket 503."""
     client = _client(stub_base_url_warden_available)
     response = client.get("/api/experiments")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["meta"]["data_mode"] == "live"
+    assert body["meta"]["capability"] == "available"
+    assert isinstance(body["items"], list) and body["items"]
+
+
+def test_experiments_live_503_when_capability_absent() -> None:
+    """An upstream without the C2 endpoint keeps the explicit EXPERIMENTS_UNAVAILABLE."""
+    client = _client("http://127.0.0.1:1", app_data_mode="live")
+    response = client.get("/api/experiments")
     assert response.status_code == 503
-    detail = response.json()["detail"]
-    assert detail["error"] == "EXPERIMENTS_UNAVAILABLE"
-    assert "不虚构趋势数据" in detail["message"]
+    assert response.json()["detail"]["error"] == "API_UNAVAILABLE"
 
 
 def test_experiments_unavailable_without_demo() -> None:
