@@ -1,0 +1,63 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8001"
+      AGENTGUARD_BASE_URL: ${AGENTGUARD_BASE_URL:-http://host.docker.internal:8000}
+      AGENTGUARD_API_TOKEN: ${AGENTGUARD_API_TOKEN:-}
+      AGENTGUARD_OPERATOR_API_TOKEN: ${AGENTGUARD_OPERATOR_API_TOKEN:-}
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost:5173}
+      DATABASE_URL: ${DATABASE_URL:-}
+    ports:
+      - "8001:8001"
+    volumes:
+      - backend-data:/srv/backend/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8001/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    # B0 default: private network only. Do not publish 8001 to public networks.
+    networks:
+      - qwb-internal
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+    networks:
+      - qwb-internal
+
+  # PostgreSQL for formal deployments (B8). Single-machine development may use SQLite.
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: qwb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qwb}
+      POSTGRES_DB: agentguard_qwb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qwb -d agentguard_qwb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qwb-internal
+    profiles: ["postgres"]
+
+volumes:
+  backend-data:
+  postgres-data:
+
+networks:
+  qwb-internal:
+    driver: bridge

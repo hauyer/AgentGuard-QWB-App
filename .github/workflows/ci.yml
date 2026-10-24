@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend lint + tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Ruff check
+        run: ruff check .
+      - name: Pytest
+        run: python -m pytest -q
+
+  frontend:
+    name: Frontend typecheck + lint + tests + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm run test
+      - name: Production build
+        run: npm run build
+
+  e2e:
+    name: Playwright critical flow
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install frontend deps
+        run: npm ci
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Start BFF
+        working-directory: backend
+        run: |
+          pip install -e ".[dev]"
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8001 > /tmp/bff.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8001/api/health && break; sleep 1; done
+      - name: Start frontend
+        run: |
+          nohup npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/frontend.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:5173/ && break; sleep 1; done
+      - name: Run E2E
+        run: npx playwright test
+
+  contract-check:
+    name: AgentGuard API contract check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run contract check
+        run: python scripts/check_agentguard_contract.py || test $? -eq 42
+
+  docker:
+    name: Docker builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t agentguard-qwb-backend:ci .
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile -t agentguard-qwb-frontend:ci .

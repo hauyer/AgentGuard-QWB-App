@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "pinned_agentguard": {
+    "repository": "https://github.com/hauyer/AgentGuard",
+    "branch": "feature/agentguard-upper-layer-v1",
+    "commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+    "commit_short": "00d12be",
+    "commit_subject": "Document A7 public API and MCP acceptance",
+    "pinned_at": "2026-10-23",
+    "local_clone": "D:/study homework/stego/AgentGuard (read-only)"
+  },
+  "api_documentation": {
+    "public_api_doc": "docs/PUBLIC_API.md",
+    "sdk": "src/agentguard/sdk.py",
+    "request_contract": "src/agentguard/contracts/warden.py (WardenAuditRequest)",
+    "evidence_contract": "src/agentguard/contracts/evidence.py (GovernedEvidence)",
+    "defense_contract": "src/agentguard/contracts/defense.py (DefensePreview)",
+    "capabilities_contract": "src/agentguard/contracts/capabilities.py (CapabilityManifest)",
+    "experiences_contract": "src/agentguard/contracts/experience.py (ExperienceSearchResult)",
+    "openapi": "exposed at runtime via /openapi.json; not committed in upstream"
+  },
+  "supported_endpoints": [
+    "GET /v1/system/health",
+    "GET /v1/system/capabilities",
+    "GET /v1/kernel/status",
+    "GET /v1/scenarios",
+    "POST /v1/investigations",
+    "GET /v1/investigations",
+    "GET /v1/investigations/{request_id}",
+    "GET /v1/evidence/investigations/{request_id}",
+    "GET /v1/defense-policies/{request_id}",
+    "POST /v1/defense-policies/{request_id}/preview",
+    "GET /v1/reports/{run_id}",
+    "GET /v1/experiences",
+    "GET /v1/system/audit-events"
+  ],
+  "auth": {
+    "general": "X-AgentGuard-Token",
+    "operator": "X-AgentGuard-Operator-Token",
+    "approval": "AGENTGUARD_APPROVAL_TOKEN (approval-sensitive actions only)"
+  },
+  "known_semantics": {
+    "warden_missing": "503 detail.error=WARDEN_NOT_CONFIGURED on investigation submission",
+    "request_id": "X-Request-ID on every response; caller value preserved if valid",
+    "pagination": "items/count/offset/limit/next_offset",
+    "evidence_levels": ["synthetic", "observational", "interventional", "causal_validated"],
+    "defense_execute": "unsupported until an approved external executor is verified"
+  }
+}
