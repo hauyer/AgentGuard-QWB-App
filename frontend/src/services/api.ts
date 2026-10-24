@@ -24,6 +24,29 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   return parseResponse<T>(response);
 }
 
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return parseResponse<T>(response);
+}
+
+/**
+ * Double-submit CSRF token: the BFF issues a signed cookie and the same token
+ * must be echoed on every mutating request. The browser never needs to know
+ * the secret; it just reads the cookie.
+ */
+function getCsrfToken(): string {
+  const match = document.cookie.match(/(?:^|;\s*)qwb_csrf=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 async function parseResponse<T>(response: Response): Promise<T> {
   let payload: unknown = null;
   try {
