@@ -120,9 +120,35 @@ class DemoService:
         items = self.fixture("evidence.json")["items"]
         return items.get(request_id)
 
+    def list_evidence(self, *, request_id: str | None = None) -> list[dict]:
+        items = list(self.fixture("evidence.json").get("items", {}).values())
+        if request_id:
+            items = [item for item in items if item.get("request_id") == request_id]
+        return items
+
     def get_defense(self, request_id: str) -> dict | None:
         items = self.fixture("defense.json")["items"]
         return items.get(request_id)
+
+    def list_defense_candidates(self, *, request_id: str | None = None) -> list[dict]:
+        items = list(self.fixture("defense.json").get("items", {}).values())
+        if request_id:
+            items = [item for item in items if item.get("request_id") == request_id]
+        return items
+
+    # ------------------------------------------------------------------ #
+    # interaction graph samples (B4)
+    # ------------------------------------------------------------------ #
+    def graph_sample(self, *, request_id: str | None) -> dict | None:
+        graph = self.fixture("graph.json")
+        # The fixed graph sample is scenario-scoped; request_id is accepted for
+        # URL stability but does not imply per-run message fidelity.
+        if request_id and graph.get("scenario_id") != "sc-qwb-001" and request_id not in graph.get("nodes", []):
+            return None
+        return graph
+
+    def graph_samples(self) -> list[dict]:
+        return [self.fixture("graph.json")]
 
     def historical_outcomes(self) -> list[dict]:
         return self.fixture("defense.json").get("historical_outcomes", [])

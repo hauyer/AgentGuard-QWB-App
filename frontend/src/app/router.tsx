@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router-dom";
 
 import { AppLayout } from "../components/layout/AppLayout";
 import { CreateInvestigationPage } from "../pages/CreateInvestigationPage";
+import { InteractionGraphPage } from "../pages/InteractionGraphPage";
 import { InvestigationDetailPage } from "../pages/InvestigationDetailPage";
 import { InvestigationsListPage } from "../pages/InvestigationsListPage";
 import { PlaceholderPage } from "../pages/PlaceholderPage";
@@ -16,7 +17,7 @@ export const router = createBrowserRouter([
       { path: "investigations", element: <InvestigationsListPage /> },
       { path: "investigations/new", element: <CreateInvestigationPage /> },
       { path: "investigations/:requestId", element: <InvestigationDetailPage /> },
-      { path: "interaction-graph", element: <PlaceholderPage title="交互图谱" stage="B4" /> },
+      { path: "interaction-graph", element: <InteractionGraphPage /> },
       { path: "evidence", element: <PlaceholderPage title="证据分析" stage="B5" /> },
       { path: "defenses", element: <PlaceholderPage title="定向防御" stage="B5" /> },
       { path: "experiments", element: <PlaceholderPage title="实验对比" stage="B6" /> },

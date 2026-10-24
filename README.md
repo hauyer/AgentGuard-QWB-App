@@ -27,7 +27,7 @@ WARDEN     ── 底层因果审计内核（只读，不直接访问）
   负责系统状态、业务数据、服务端凭证、AgentGuard REST 调用、响应转换与审计。
   不重新实现 AgentGuard 的调查、证据门控、经验学习和策略算法。
 
-## 当前进度（B0–B3）
+## 当前进度（B0–B4）
 
 - [x] **B0** 独立 Git 仓库初始化，前后端基础工程可运行；AgentGuard 接口基线固定：
   `feature/agentguard-upper-layer-v1` @
@@ -47,9 +47,14 @@ WARDEN     ── 底层因果审计内核（只读，不直接访问）
       详情页时间线只标记有数据支撑的步骤（未确认步骤显式 pending）；
       demo 提交只记录不假装运行（demo_note）；会话/Cookie/CSRF 双提交与角色门控
       （viewer/analyst/operator/admin）已接线
-- [x] 后端 pytest（66 passed）、前端 vitest（34 passed）、Playwright 冒烟、CI 工作流、
-      Docker 构建
-- [ ] B4 交互图谱 → B5 证据与防御 → B6 实验/报告/经验 → B7 离线 Demo 完善 →
+- [x] **B4** 多 Agent 交互图谱：`GET /api/interaction-graph`、`/api/interaction-graph/samples`；
+      React Flow 页面（五类节点、筛选、时间回放、候选路径高亮、边/节点元数据抽屉、
+      按调查导出 PNG）；Live 模式因公共 API 缺失消息级图谱显式返回
+      `503 GRAPH_API_UNAVAILABLE`（QWB-INT-001），绝不补造通信边；Demo 使用固定
+      SYNTHETIC 夹具并全程标注不可证明结论
+- [x] 后端 pytest（72 passed）、ruff 0、前端 vitest（37 passed）/ typecheck / lint /
+      build 全绿、CI 工作流、Docker 构建
+- [ ] B5 证据与防御 → B6 实验/报告/经验 → B7 离线 Demo 完善 →
       B8 权限/部署/发布
 
 ## 快速开始
