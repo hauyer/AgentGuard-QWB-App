@@ -37,17 +37,51 @@ class Project(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(128), unique=True)
     description: Mapped[str | None] = mapped_column(Text)
+    # B12: active | archived; the creator (username) owns the project.
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    created_by: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ProjectMember(Base):
+    """Project-scoped membership (B12).
+
+    Membership is keyed by username (not FK): database users and gated demo
+    users share the same identity namespace, and removing a row immediately
+    revokes project access without touching global roles.
+    """
+
     __tablename__ = "project_members"
-    __table_args__ = (UniqueConstraint("project_id", "user_id", name="uq_project_member"),)
+    __table_args__ = (UniqueConstraint("project_id", "username", name="uq_project_member"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    username: Mapped[str] = mapped_column(String(64), index=True)
+    # Project-level role within the global viewer/analyst/operator/admin scale:
+    # caps what this user may do inside this project only.
     role: Mapped[str] = mapped_column(String(16))
+    added_by: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProjectInvestigation(Base):
+    """Reference from a project to an AgentGuard-stored investigation (B12).
+
+    Only the reference and business metadata live here; run state stays
+    authoritative in AgentGuard and is never duplicated.
+    """
+
+    __tablename__ = "project_investigations"
+    __table_args__ = (UniqueConstraint("project_id", "agentguard_request_id", name="uq_project_investigation"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    agentguard_request_id: Mapped[str] = mapped_column(String(64), index=True)
+    created_by: Mapped[str | None] = mapped_column(String(64))
+    display_name: Mapped[str | None] = mapped_column(String(256))
+    notes: Mapped[str | None] = mapped_column(Text)
+    # whether the BFF verified the request_id exists upstream at link time
+    verification: Mapped[str] = mapped_column(String(16), default="unverified")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -105,5 +139,7 @@ class AppAuditEvent(Base):
     role: Mapped[str | None] = mapped_column(String(16))
     action: Mapped[str] = mapped_column(String(64), index=True)
     target: Mapped[str | None] = mapped_column(String(128))
+    # B12: optional project scope so audit queries can filter per project.
+    project_id: Mapped[int | None] = mapped_column(index=True)
     detail: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

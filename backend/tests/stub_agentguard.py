@@ -84,6 +84,9 @@ def create_stub_app(
     app = FastAPI(title="AgentGuard Stub")
 
     state = {"kernel_status": kernel_status, "warden_available": warden_available}
+    # request_ids the stub will acknowledge as existing (B11 contract fidelity:
+    # GET on an unknown id must 404, matching the real AgentGuard service)
+    known_investigations: set[str] = {"inv-stub-0001"}
 
     @app.get("/v1/system/health")
     def health() -> dict:
@@ -133,6 +136,7 @@ def create_stub_app(
                 status_code=503,
                 detail={"error": "WARDEN_NOT_CONFIGURED", "message": "Stub WARDEN is not configured"},
             )
+        known_investigations.add(request.request_id)
         return {
             "request_id": request.request_id,
             "status": "planned",
@@ -160,6 +164,14 @@ def create_stub_app(
 
     @app.get("/v1/investigations/{request_id}")
     def get_investigation(request_id: str) -> dict:
+        # Contract fidelity (B11): the real service returns 404 for unknown
+        # request_ids - the stub must not validate arbitrary IDs either.
+        known = known_investigations
+        if request_id not in known:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=404,
+                                detail={"error": "NOT_FOUND", "message": "unknown workflow"})
         return {
             "request_id": request_id,
             "status": "completed",

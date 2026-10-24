@@ -47,6 +47,7 @@ class AuditService:
         action: str,
         target: str | None,
         detail: str | None = None,
+        project_id: int | None = None,
     ) -> None:
         now = datetime.now(UTC)
         if self._settings is not None:
@@ -59,6 +60,7 @@ class AuditService:
                             role=role,
                             action=action[:64],
                             target=target[:128] if target else None,
+                            project_id=project_id,
                             # Bound the row size; never log credentials here.
                             detail=detail[:MAX_DETAIL_CHARS] if detail else None,
                             created_at=now,
@@ -72,6 +74,7 @@ class AuditService:
             "role": role,
             "action": action,
             "target": target,
+            "project_id": project_id,
             "detail": detail,
             "at": now.isoformat(),
         }
@@ -87,6 +90,9 @@ class AuditService:
         offset: int = 0,
         actor: str | None = None,
         action: str | None = None,
+        project_id: int | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> tuple[list[dict], int]:
         """Return (items newest-first, total_matching)."""
         if self._settings is not None:
@@ -98,6 +104,17 @@ class AuditService:
                         conditions.append(AppAuditEvent.actor == actor)
                     if action:
                         conditions.append(AppAuditEvent.action == action)
+                    if project_id is not None:
+                        conditions.append(AppAuditEvent.project_id == project_id)
+                    for field, value in (("since", since), ("until", until)):
+                        if value:
+                            try:
+                                moment = datetime.fromisoformat(value)
+                            except ValueError as exc:
+                                raise ValueError(f"audit {field} must be an ISO-8601 timestamp") from exc
+                            conditions.append(
+                                AppAuditEvent.created_at >= moment if field == "since"
+                                else AppAuditEvent.created_at <= moment)
                     total = session.scalar(
                         select(func.count()).select_from(AppAuditEvent).where(*conditions)
                     )
@@ -115,6 +132,7 @@ class AuditService:
                             "role": row.role,
                             "action": row.action,
                             "target": row.target,
+                            "project_id": row.project_id,
                             "detail": row.detail,
                             "at": row.created_at.isoformat() if row.created_at else None,
                         }
@@ -126,6 +144,8 @@ class AuditService:
             filtered = [event for event in filtered if event["actor"] == actor]
         if action:
             filtered = [event for event in filtered if event["action"] == action]
+        if project_id is not None:
+            filtered = [event for event in filtered if event.get("project_id") == project_id]
         total = len(filtered)
         window = list(reversed(filtered))[: limit + offset]
         return window[offset : offset + limit], total

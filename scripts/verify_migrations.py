@@ -21,8 +21,8 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent / "backend"
 
 REQUIRED_TABLES = {
     "alembic_version", "users", "projects", "project_members",
-    "investigation_bookmarks", "report_exports", "demo_scenarios",
-    "ui_preferences", "app_audit_events",
+    "project_investigations", "investigation_bookmarks", "report_exports",
+    "demo_scenarios", "ui_preferences", "app_audit_events",
 }
 REQUIRED_USER_COLUMNS = {"password_hash", "is_active"}
 

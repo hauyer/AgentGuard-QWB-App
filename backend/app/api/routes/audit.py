@@ -21,10 +21,19 @@ def audit_events(
     offset: int = Query(default=0, ge=0),
     actor: str | None = Query(default=None, min_length=1, max_length=128),
     action: str | None = Query(default=None, min_length=1, max_length=64),
+    project_id: int | None = Query(default=None, ge=1),
+    since: str | None = Query(default=None, min_length=1, max_length=40),
+    until: str | None = Query(default=None, min_length=1, max_length=40),
 ) -> dict:
-    items, total = request.app.state.audit_service.query(
-        limit=limit, offset=offset, actor=actor, action=action
-    )
+    try:
+        items, total = request.app.state.audit_service.query(
+            limit=limit, offset=offset, actor=actor, action=action,
+            project_id=project_id, since=since, until=until,
+        )
+    except ValueError as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=422, detail={"error": "INVALID_FILTER", "message": str(exc)}) from exc
     return {
         "count": len(items),
         "total": total,
