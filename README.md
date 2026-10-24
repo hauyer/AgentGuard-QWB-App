@@ -27,7 +27,7 @@ WARDEN     ── 底层因果审计内核（只读，不直接访问）
   负责系统状态、业务数据、服务端凭证、AgentGuard REST 调用、响应转换与审计。
   不重新实现 AgentGuard 的调查、证据门控、经验学习和策略算法。
 
-## 当前进度（B0–B7）
+## 当前进度（B0–B8 全部完成）
 
 - [x] **B0** 独立 Git 仓库初始化，前后端基础工程可运行；AgentGuard 接口基线固定：
   `feature/agentguard-upper-layer-v1` @
@@ -68,9 +68,23 @@ WARDEN     ── 底层因果审计内核（只读，不直接访问）
       证据与限制→防御候选→实验比较→生成报告，每步带 fixture_ref 与深链）；
       证据/防御页支持 `?request_id=` 深链；Live/Unavailable 下流程仍可浏览、
       场景数据按模式真实返回；demo/README.md 记录数据模式、夹具注册、流程与安全约束
-- [x] 后端 pytest（97 passed）、ruff 0、前端 vitest（49 passed）/ typecheck / lint /
-      build 全绿、CI 工作流、Docker 构建
-- [ ] B8 权限/部署/发布
+- [x] **B8** 权限/安全/数据库/部署收尾：
+      - 应用层业务表（users/projects/project_members/investigation_bookmarks/
+        report_exports/demo_scenarios/ui_preferences/app_audit_events）+ Alembic
+        初始迁移 `0001`（SQLite/PostgreSQL 均可执行，含升级/降级测试）
+      - 业务操作审计：`GET /api/audit/events`（Operator+），调查创建与防御预览
+        自动记录 actor/action/target/detail（内存有界缓冲，可扩展持久化到表）
+      - 会话 Cookie 属性可配置：HttpOnly + SameSite=Lax 恒开，`SESSION_COOKIE_SECURE`
+        支持 HTTPS 部署；`GET /api/system/settings` 返回数据模式/认证状态/角色说明；
+        `/settings` 页面展示角色与安全边界（Operator 不自动映射 AgentGuard 高权限）
+      - 安全回归测试：Token 不泄漏、Cookie 标志、viewer 不可建调查、审计角色门控、
+        上游 URL 拒绝凭证/路径（SSRF 防护）——后端 pytest（106 passed）/ ruff 0
+      - 前端 vitest（51 passed）/ typecheck / lint / build 全绿；CI 五任务
+        （backend/frontend/e2e/contract-check/docker）覆盖真实联调标 skipped
+- [x] **MVP 验收清单**：前后端独立运行、统一界面导航、连接状态真实展示、调查闭环、
+      图谱与证据带来源、防御候选不伪造执行、报告导出、离线 Demo 完整、凭证不泄漏、
+      测试与构建通过、部署文档完整、不直接调用底层三仓库、不修改 AgentGuard 内核
+- [x] 本地 Git 仓库（main）已提交 B0–B8；远程仓库待用户执行 GitHub CLI 命令（见下）
 
 ## 快速开始
 
@@ -132,6 +146,30 @@ cd frontend; npx playwright test
 docker compose up --build          # frontend :5173, backend :8001
 docker compose --profile postgres up --build   # 追加 PostgreSQL
 ```
+
+默认开发部署绑定本机，不自动暴露公网；PostgreSQL 服务带健康检查、数据持久化卷；
+`frontend/Dockerfile` + `nginx.conf` 提供反向代理与 gzip/缓存头。
+
+### 6) 认证与数据库（B8）
+
+```powershell
+# 启用四角色认证（生产必须）
+# 设置 AUTH_ENABLED=true、APP_SECRET_KEY（强随机）、SESSION_COOKIE_SECURE=true（HTTPS）
+# 演示用户：viewer/analyst/operator/admin，密码为 <用户名>-demo
+
+# 初始化应用层数据库（PostgreSQL 或 SQLite）
+cd backend
+alembic upgrade head        # 创建 8 张 BFF 业务表（含 app_audit_events）
+```
+
+### 7) 创建远程仓库（可选，需 GitHub CLI 已登录）
+
+```powershell
+gh auth login
+gh repo create AgentGuard-QWB-App --private --source . --push
+```
+
+未登录 GitHub CLI 时仅维护本地仓库，不影响交付。
 
 ## 环境变量
 

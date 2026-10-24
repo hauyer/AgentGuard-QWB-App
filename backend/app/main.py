@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.integrations.agentguard_client import AgentGuardClient, AgentGuardError
+from app.services.audit_service import AuditService
 from app.services.demo_service import DemoService
 from app.services.status_service import APP_NAME, APP_VERSION
 
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
     app.state.agentguard_client = AgentGuardClient(settings)
     fixtures_dir = _resolve_fixtures_dir(settings.demo_fixtures_dir)
     app.state.demo_service = DemoService(fixtures_dir)
+    app.state.audit_service = AuditService()
     logger.info("BFF started; upstream AgentGuard fixed at %s", settings.agentguard_base_url)
     logger.info("Demo fixtures loaded from %s", fixtures_dir)
     try:

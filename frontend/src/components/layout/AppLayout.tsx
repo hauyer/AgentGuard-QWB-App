@@ -14,6 +14,7 @@ import {
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useSystemStatus } from "../../hooks/use-system-status";
+import { useAuthStore } from "../../stores/auth-store";
 import { cn } from "../../utils/cn";
 import { Badge } from "../ui/badge";
 import { StatusDot } from "../ui/status-dot";
@@ -49,6 +50,8 @@ function dataModeLabel(mode: string): string {
 export function AppLayout() {
   const { data } = useSystemStatus();
   const agentguardReachable = data?.agentguard.reachable;
+  const username = useAuthStore((state) => state.username);
+  const role = useAuthStore((state) => state.role);
 
   return (
     <div className="flex h-full min-h-screen">
@@ -96,7 +99,7 @@ export function AppLayout() {
               <StatusDot tone={agentguardReachable === undefined ? "neutral" : agentguardReachable ? "ok" : "danger"} />
               AgentGuard {agentguardReachable ? "已连接" : agentguardReachable === undefined ? "检测中" : "不可用"}
             </span>
-            <span className="text-slate-500">Viewer</span>          </div>
+            <span className="text-slate-500">{role ?? "Viewer"}{username ? ` · ${username}` : ""}</span>          </div>
         </header>
         <main className="min-w-0 flex-1 overflow-y-auto p-6">
           <Outlet />

@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     session_cookie_name: str = "qwb_session"
     csrf_cookie_name: str = "qwb_csrf"
     session_max_age_seconds: int = 8 * 60 * 60
+    # Set SESSION_COOKIE_SECURE=true when serving over HTTPS (reverse proxy).
+    # The flag is off by default so local HTTP development works out of the box.
+    session_cookie_secure: bool = False
 
     @field_validator("agentguard_base_url")
     @classmethod

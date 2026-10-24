@@ -64,7 +64,7 @@ def investigations_create(
     request: Request,
     body: CreateInvestigationRequest,
     client: AgentGuardClientDep,
-    _user: AnalystCsrf,
+    user: AnalystCsrf,
 ) -> dict:
     try:
         payload, meta = create_investigation(
@@ -75,6 +75,13 @@ def investigations_create(
         )
     except InvestigationServiceError as exc:
         return _error_response(exc)
+    request.app.state.audit_service.record(
+        actor=user.username,
+        role=user.role,
+        action="investigation.create",
+        target=payload.get("request_id"),
+        detail=f"mode={payload.get('mode', body.mode)} data_mode={meta.get('data_mode')}",
+    )
     return {"meta": meta, "created": payload}
 
 

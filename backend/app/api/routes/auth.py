@@ -52,10 +52,17 @@ def login(request: Request, body: LoginRequest) -> Response:
         max_age=settings.session_max_age_seconds,
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.session_cookie_secure,
         path="/",
     )
-    response.set_cookie(settings.csrf_cookie_name, csrf, httponly=False, samesite="lax", secure=False, path="/")
+    response.set_cookie(
+        settings.csrf_cookie_name,
+        csrf,
+        httponly=False,
+        samesite="lax",
+        secure=settings.session_cookie_secure,
+        path="/",
+    )
     return response
 
 

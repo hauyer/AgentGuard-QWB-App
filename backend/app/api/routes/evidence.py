@@ -70,7 +70,7 @@ def defense_preview(
     request: Request,
     request_id: str,
     client: AgentGuardClientDep,
-    _user: AnalystCsrf,
+    user: AnalystCsrf,
 ) -> dict:
     """Generate/refresh candidate preview only; never executes a defense."""
     try:
@@ -79,6 +79,13 @@ def defense_preview(
         )
     except EvidenceServiceError as exc:
         return _error_response(exc)
+    request.app.state.audit_service.record(
+        actor=user.username,
+        role=user.role,
+        action="defense.preview",
+        target=request_id,
+        detail=f"data_mode={meta.get('data_mode')} execution_performed={payload.get('execution_performed')}",
+    )
     return {"meta": meta, "defense": payload}
 
 

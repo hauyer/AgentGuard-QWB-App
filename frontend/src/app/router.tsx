@@ -10,8 +10,8 @@ import { ExperimentsPage } from "../pages/ExperimentsPage";
 import { InteractionGraphPage } from "../pages/InteractionGraphPage";
 import { InvestigationDetailPage } from "../pages/InvestigationDetailPage";
 import { InvestigationsListPage } from "../pages/InvestigationsListPage";
-import { PlaceholderPage } from "../pages/PlaceholderPage";
 import { ReportsPage } from "../pages/ReportsPage";
+import { SettingsPage } from "../pages/SettingsPage";
 import { SystemOverviewPage } from "../pages/SystemOverviewPage";
 
 export const router = createBrowserRouter([
@@ -30,7 +30,7 @@ export const router = createBrowserRouter([
       { path: "experiments", element: <ExperimentsPage /> },
       { path: "experiences", element: <ExperiencesPage /> },
       { path: "reports", element: <ReportsPage /> },
-      { path: "settings", element: <PlaceholderPage title="系统设置" stage="B8" /> },
+      { path: "settings", element: <SettingsPage /> },
     ],
   },
 ]);
