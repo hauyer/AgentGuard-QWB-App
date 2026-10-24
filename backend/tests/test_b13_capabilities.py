@@ -43,8 +43,8 @@ def test_graph_live_honest_empty_when_upstream_has_no_data(stub_base_url: str) -
     payload = client.get("/api/interaction-graph", params={"request_id": "inv-stub-0001"}).json()
     assert payload["meta"]["data_mode"] == "live"
     assert payload["meta"]["capability"] == "upstream_no_data"
-    assert payload["meta"]["limitations"]
-    assert payload["graph"]["available"] is False
+    assert payload["graph"]["not_provable"]
+    assert payload["graph"]["upstream_available"] is False
     assert payload["graph"]["nodes"] == [] and payload["graph"]["edges"] == []
 
 
@@ -53,16 +53,16 @@ def test_graph_live_populated_passthrough_keeps_ids(stub_base_url: str) -> None:
     payload = client.get("/api/interaction-graph", params={"request_id": "inv-stub-graph-0002"}).json()
     graph = payload["graph"]
     assert payload["meta"]["capability"] == "available"
-    assert graph["available"] is True
-    node_ids = {node["node_id"] for node in graph["nodes"]}
+    assert graph["upstream_available"] is True
+    node_ids = {node["id"] for node in graph["nodes"]}
     assert node_ids == {"agent-a", "tool-1", "agent-b"}
     edge = graph["edges"][0]
     assert edge["source"] and edge["target"]
     assert edge["message_id"] == "msg-0001"
-    assert edge["evidence_refs"] == ["ev-stub-000000000001"]
+    assert edge["metadata"]["evidence_refs"] == ["ev-stub-000000000001"]
     # candidate paths stay candidates in the payload, never rewritten as causal
     assert "candidate_paths" in graph
-    assert payload["meta"]["source"] == "warden_message_metadata"
+    assert payload["meta"]["source"] == "agentguard-interaction-graph"
 
 
 def test_graph_live_503_when_capability_not_published(tmp_path) -> None:

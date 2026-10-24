@@ -34,12 +34,7 @@ def _agentguard_reachable(client: AgentGuardClient) -> bool:
 
 
 def _validated_graph(payload: dict) -> dict:
-    """Pass through the upstream graph with structural sanity checks.
-
-    Nodes/edges keep their upstream IDs (node_id, source/target, message_id,
-    evidence_refs); candidate paths stay candidates - never presented as
-    confirmed causal paths.
-    """
+    """Structural sanity checks on the raw upstream graph."""
     if not isinstance(payload.get("nodes"), list) or not isinstance(payload.get("edges"), list):
         raise AgentGuardError(502, "API_BAD_RESPONSE",
                               "interaction graph response has invalid nodes/edges")
@@ -50,6 +45,68 @@ def _validated_graph(payload: dict) -> dict:
         if not isinstance(edge, dict) or not edge.get("source") or not edge.get("target"):
             raise AgentGuardError(502, "API_BAD_RESPONSE", "interaction graph edge missing endpoints")
     return payload
+
+
+_NODE_TYPE_MAP = {"agent": "agent", "tool": "tool", "model": "model",
+                  "invocation": "invocation", "external_resource": "external_resource"}
+
+
+def _to_app_graph(payload: dict) -> dict:
+    """Convert the upstream C1 graph to the application graph shape used since
+    B4, preserving every provenance id (node_id, message_id, evidence_refs).
+    No risk value is invented: upstream fields absent stay 'unknown'."""
+    nodes = [
+        {
+            "id": str(node["node_id"]),
+            "type": _NODE_TYPE_MAP.get(str(node.get("node_type") or "agent"), "invocation"),
+            "label": str(node.get("label") or node["node_id"]),
+            "risk": str(node.get("risk") or "unknown"),
+            "timestamp": node.get("timestamp"),
+            "source_id": str(node.get("source_id") or node["node_id"]),
+            "metadata": node.get("metadata") or {k: v for k, v in node.items()
+                                                 if k not in ("node_id", "node_type")},
+        }
+        for node in payload.get("nodes", [])
+    ]
+    edges = [
+        {
+            "id": str(edge.get("message_id") or f"{edge['source']}->{edge['target']}"),
+            "source": str(edge["source"]),
+            "target": str(edge["target"]),
+            "type": ("message" if "message" in str(edge.get("event_type") or "")
+                     else "result" if "result" in str(edge.get("event_type") or "")
+                     else "invocation"),
+            "message_id": edge.get("message_id"),
+            "risk": str(edge.get("risk") or "unknown"),
+            "timestamp": edge.get("timestamp"),
+            "source_id": str((edge.get("evidence_refs") or [edge.get("message_id") or ""])[0]),
+            "metadata": edge.get("metadata") or {k: v for k, v in edge.items()
+                                                 if k not in ("source", "target")},
+        }
+        for edge in payload.get("edges", [])
+    ]
+    candidates = [
+        {
+            "id": f"candidate-{index}",
+            "label": (str(path.get("label") or f"候选路径 {index + 1}")
+                      + (f"（score {path.get('score')}）" if path.get("score") is not None else "")),
+            "node_ids": [str(item) for item in path.get("nodes", [])],
+            "edge_ids": [str(item) for item in path.get("edges", [])],
+            "evidence_refs": [str(item) for item in path.get("evidence_refs", [])],
+            "risk": str(path.get("risk") or "unknown"),
+        }
+        for index, path in enumerate(payload.get("candidate_paths", []))
+        if isinstance(path, dict)
+    ]
+    return {
+        "scenario_id": payload.get("scenario_id"),
+        "nodes": nodes,
+        "edges": edges,
+        "candidate_paths": candidates,
+        "not_provable": [str(item) for item in payload.get("limitations", [])],
+        "upstream_available": bool(payload.get("available")),
+        "upstream_data_status": payload.get("data_status"),
+    }
 
 
 def get_graph(
@@ -66,16 +123,15 @@ def get_graph(
         if not request_id:
             raise GraphServiceError(422, "REQUEST_ID_REQUIRED", "Live 模式需要 request_id 才能查询交互图谱")
         try:
-            payload = _validated_graph(client.get_interaction_graph(request_id))
+            payload = _to_app_graph(_validated_graph(client.get_interaction_graph(request_id)))
         except AgentGuardError as exc:
             raise GraphServiceError(
                 exc.status_code or 502, exc.code,
                 f"{exc}（request_id={request_id}）") from exc
         meta = {
             "data_mode": "live",
-            "capability": "available" if payload.get("available") else "upstream_no_data",
-            "source": payload.get("source") or "agentguard",
-            "limitations": payload.get("limitations", []),
+            "capability": "available" if payload.get("upstream_available") else "upstream_no_data",
+            "source": "agentguard-interaction-graph",
         }
         return payload, meta
     if mode in (DataMode.RECORDED, DataMode.SYNTHETIC):

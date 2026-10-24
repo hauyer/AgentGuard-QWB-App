@@ -46,5 +46,8 @@ export interface GraphResponse {
     edges: GraphEdge[];
     candidate_paths: CandidatePath[];
     not_provable?: string[];
+    /** B13 upstream C1 self-reported availability (absent in demo fixtures) */
+    upstream_available?: boolean;
+    upstream_data_status?: string | null;
   };
 }

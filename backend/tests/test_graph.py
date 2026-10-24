@@ -66,9 +66,9 @@ def test_graph_live_reports_upstream_no_data_honestly(stub_base_url_warden_avail
     client = _client(stub_base_url_warden_available)
     payload = client.get("/api/interaction-graph", params={"request_id": "inv-stub-0001"}).json()
     assert payload["meta"]["capability"] == "upstream_no_data"
-    assert payload["graph"]["available"] is False
+    assert payload["graph"]["upstream_available"] is False
     assert payload["graph"]["nodes"] == []
-    assert payload["meta"]["limitations"]
+    assert payload["graph"]["not_provable"]  # upstream limitations surfaced
 
 
 def test_graph_unavailable_without_demo() -> None:

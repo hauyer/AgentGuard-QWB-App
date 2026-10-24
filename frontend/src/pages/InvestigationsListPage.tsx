@@ -38,6 +38,7 @@ export function InvestigationsListPage() {
   // Filter + pagination state lives in the URL so a refresh restores the view.
   const [searchParams, setSearchParams] = useSearchParams();
   const status = searchParams.get("status") ?? "";
+  const keyword = searchParams.get("q") ?? "";
   const offset = Number(searchParams.get("offset") ?? "0") || 0;
   const limit = 10;
 
@@ -47,21 +48,41 @@ export function InvestigationsListPage() {
     const params = new URLSearchParams(searchParams);
     if (value) params.set(key, value);
     else params.delete(key);
-    if (key === "status") params.delete("offset");
+    if (key !== "offset") params.delete("offset");
     setSearchParams(params);
   };
+
+  // Keyword filter is client-side over the loaded page: request_id / scenario
+  // substring match. Server-side search capability is not published upstream.
+  const rows = (data?.items ?? []).filter((row) => {
+    if (!keyword) return true;
+    const needle = keyword.toLowerCase();
+    return (
+      row.request_id.toLowerCase().includes(needle) ||
+      (row.scenario_id ?? "").toLowerCase().includes(needle) ||
+      (row.run_id ?? "").toLowerCase().includes(needle)
+    );
+  });
 
   const columns: Column<InvestigationSummaryRow>[] = [
     {
       key: "request_id",
       header: "调查 ID",
       render: (row) => (
-        <Link
-          to={`/investigations/${encodeURIComponent(row.request_id)}`}
-          className="font-mono text-xs text-brand-700 hover:underline"
-        >
-          {row.request_id}
-        </Link>
+        <div className="flex flex-col gap-0.5">
+          <Link
+            to={`/investigations/${encodeURIComponent(row.request_id)}/workspace`}
+            className="font-mono text-xs text-brand-700 hover:underline"
+          >
+            {row.request_id}
+          </Link>
+          <Link
+            to={`/investigations/${encodeURIComponent(row.request_id)}`}
+            className="text-[10px] text-slate-400 hover:text-slate-600"
+          >
+            简要详情
+          </Link>
+        </div>
       ),
     },
     {
@@ -120,6 +141,13 @@ export function InvestigationsListPage() {
       {data?.meta && <DemoBanner meta={data.meta} />}
 
       <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="search"
+          value={keyword}
+          onChange={(event) => setParam("q", event.target.value)}
+          placeholder="搜索 ID / 场景 / run…"
+          className="w-56 rounded-md border border-surface-border px-2 py-1 text-xs"
+        />
         {STATUS_OPTIONS.map((option) => (
           <button
             key={option.value}
@@ -140,11 +168,14 @@ export function InvestigationsListPage() {
 
       <DataTable
         columns={columns}
-        rows={data?.items ?? []}
+        rows={rows}
         rowKey={(row) => row.request_id}
         loading={isLoading}
         emptyTitle="没有调查记录"
-        emptyDescription={status ? "当前状态下没有调查记录，请切换筛选条件。" : "还没有任何调查，点击「新建调查」开始。"}
+        emptyDescription={
+          keyword ? "没有匹配关键字的调查，请调整搜索词。" :
+          status ? "当前状态下没有调查记录，请切换筛选条件。" : "还没有任何调查，点击「新建调查」开始。"
+        }
         error={
           error ? (
             <ErrorState
