@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     app_cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     app_data_mode: str = ""
     database_url: str | None = None
+    demo_fixtures_dir: str = ""
 
     @field_validator("agentguard_base_url")
     @classmethod

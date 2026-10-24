@@ -1,0 +1,44 @@
+{
+  "schema_version": "0.1",
+  "scenario_id": "sc-qwb-001",
+  "nodes": [
+    { "id": "agent-a", "type": "agent", "label": "Agent A（采购处理）", "risk": "high", "timestamp": "2026-10-20T09:12:00+08:00", "source_id": "agent-a" },
+    { "id": "agent-b", "type": "agent", "label": "Agent B（文档解析）", "risk": "medium", "timestamp": "2026-10-20T09:12:01+08:00", "source_id": "agent-b" },
+    { "id": "tool-settlement", "type": "tool", "label": "结算工具（内部）", "risk": "high", "timestamp": "2026-10-20T09:12:20+08:00", "source_id": "tool:settlement" },
+    { "id": "tool-whitelist", "type": "tool", "label": "工具白名单网关", "risk": "low", "timestamp": "2026-10-20T09:12:20+08:00", "source_id": "tool:whitelist" },
+    { "id": "model-m1", "type": "model", "label": "模型 agent-suite-2.1", "risk": "low", "timestamp": "2026-10-20T09:12:00+08:00", "source_id": "model:agent-suite-2.1" },
+    { "id": "inv-01", "type": "invocation", "label": "inv-01 结算调用", "risk": "high", "timestamp": "2026-10-20T09:12:20+08:00", "source_id": "inv-01" },
+    { "id": "inv-02", "type": "invocation", "label": "inv-02 白名单查询", "risk": "low", "timestamp": "2026-10-20T09:12:18+08:00", "source_id": "inv-02" },
+    { "id": "res-ext", "type": "external_resource", "label": "外部供应商文档", "risk": "medium", "timestamp": "2026-10-20T09:12:05+08:00", "source_id": "res:vendor-doc" }
+  ],
+  "edges": [
+    { "id": "e-01", "source": "res-ext", "target": "agent-b", "type": "message", "message_id": "msg-041", "risk": "medium", "timestamp": "2026-10-20T09:12:05+08:00", "source_id": "msg-041", "metadata": { "role": "tool_result", "summary": "供应商文档解析结果（含注入特征）" } },
+    { "id": "e-02", "source": "agent-b", "target": "agent-a", "type": "message", "message_id": "msg-042", "risk": "high", "timestamp": "2026-10-20T09:12:06+08:00", "source_id": "msg-042", "metadata": { "role": "agent_message", "summary": "转述文档中的结算指令" } },
+    { "id": "e-03", "source": "agent-a", "target": "tool-whitelist", "type": "invocation", "message_id": "inv-02", "risk": "low", "timestamp": "2026-10-20T09:12:18+08:00", "source_id": "inv-02", "metadata": { "tool": "whitelist.query", "summary": "查询白名单（合法）" } },
+    { "id": "e-04", "source": "tool-whitelist", "target": "agent-a", "type": "result", "message_id": "res-02", "risk": "low", "timestamp": "2026-10-20T09:12:19+08:00", "source_id": "res-02", "metadata": { "summary": "白名单查询结果：结算工具不在白名单" } },
+    { "id": "e-05", "source": "agent-a", "target": "tool-settlement", "type": "invocation", "message_id": "inv-01", "risk": "high", "timestamp": "2026-10-20T09:12:20+08:00", "source_id": "inv-01", "metadata": { "tool": "settlement.execute", "summary": "越权调用：绕过白名单直接结算" } },
+    { "id": "e-06", "source": "model-m1", "target": "agent-a", "type": "invocation", "message_id": "inf-01", "risk": "low", "timestamp": "2026-10-20T09:12:00+08:00", "source_id": "inf-01", "metadata": { "summary": "模型推理：生成工具调用计划" } }
+  ],
+  "candidate_paths": [
+    {
+      "id": "path-qwb-001",
+      "label": "注入诱导越权结算路径",
+      "node_ids": ["res-ext", "agent-b", "agent-a", "tool-settlement"],
+      "edge_ids": ["e-01", "e-02", "e-05"],
+      "evidence_refs": ["ev-qwb-0001", "ev-qwb-0002", "ev-qwb-0004"],
+      "risk": "high"
+    },
+    {
+      "id": "path-qwb-002",
+      "label": "白名单绕过尝试路径",
+      "node_ids": ["agent-a", "tool-whitelist", "tool-settlement"],
+      "edge_ids": ["e-03", "e-04", "e-05"],
+      "evidence_refs": ["ev-qwb-0003"],
+      "risk": "medium"
+    }
+  ],
+  "not_provable": [
+    "图谱边不代表真实消息级传输，仅用于演示候选路径与证据引用对应。",
+    "风险分级为演示标注，不构成运行风险评分。"
+  ]
+}

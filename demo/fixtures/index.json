@@ -1,0 +1,164 @@
+{
+  "schema_version": "0.1",
+  "agentguard_commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+  "agentguard_version": "0.1.0-a7",
+  "collected_at": "2026-10-24T04:55:35.681748+00:00",
+  "fixtures": [
+    {
+      "fixture_id": "fx-scenarios-001",
+      "file": "scenarios.json",
+      "data_mode": "synthetic",
+      "source": "generated for QWB demo",
+      "collected_at": "2026-10-24T04:55:35.681748+00:00",
+      "agentguard_version": "0.1.0-a7",
+      "agentguard_commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+      "sanitized": true,
+      "sha256": "831eef62d435a9b859db395008d341f36cc0e9a585d8990997e4f29ed414891a",
+      "capabilities": [
+        "scenario browsing"
+      ],
+      "not_provable": [
+        "场景不构成真实威胁环境复现。"
+      ]
+    },
+    {
+      "fixture_id": "fx-inv-001",
+      "file": "investigations.json",
+      "data_mode": "recorded",
+      "source": "sanitised recording from AgentGuard A7 contract tests",
+      "collected_at": "2026-10-24T04:55:35.681748+00:00",
+      "agentguard_version": "0.1.0-a7",
+      "agentguard_commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+      "sanitized": true,
+      "sha256": "3f4aeb8b9993ca10d59661187ad285a3a857bc69dd8f75629a6f0bdc2414687b",
+      "capabilities": [
+        "investigations.list",
+        "investigations.detail"
+      ],
+      "not_provable": [
+        "调查状态不代表真实 WARDEN 运行。"
+      ]
+    },
+    {
+      "fixture_id": "fx-timeline-001",
+      "file": "timeline.json",
+      "data_mode": "recorded",
+      "source": "derived from recorded investigation states",
+      "collected_at": "2026-10-24T04:55:35.681748+00:00",
+      "agentguard_version": "0.1.0-a7",
+      "agentguard_commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+      "sanitized": true,
+      "sha256": "6da1460f7c82ec61b70ccc66f619d96666716b0abf7c951ecfe8d27d679310ed",
+      "capabilities": [
+        "investigations.timeline"
+      ],
+      "not_provable": [
+        "事件时间为录制值，不能作为真实运行时间线。"
+      ]
+    },
+    {
+      "fixture_id": "fx-evidence-001",
+      "file": "evidence.json",
+      "data_mode": "recorded",
+      "source": "sanitised governed evidence samples",
+      "collected_at": "2026-10-24T04:55:35.681748+00:00",
+      "agentguard_version": "0.1.0-a7",
+      "agentguard_commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+      "sanitized": true,
+      "sha256": "d4362082c87c2556cd54f67e3278efd43d6e341142bbcf7970a9f099032abc2c",
+      "capabilities": [
+        "evidence.view"
+      ],
+      "not_provable": [
+        "causal_validated 结论仅在录制样例受控条件下成立。"
+      ]
+    },
+    {
+      "fixture_id": "fx-defense-001",
+      "file": "defense.json",
+      "data_mode": "recorded",
+      "source": "sanitised defense preview samples",
+      "collected_at": "2026-10-24T04:55:35.681748+00:00",
+      "agentguard_version": "0.1.0-a7",
+      "agentguard_commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+      "sanitized": true,
+      "sha256": "ad4bbd018673541a733c92751c57a6bb3b51604152b40c80cf5ba517a71802ae",
+      "capabilities": [
+        "defense.preview",
+        "defense.view"
+      ],
+      "not_provable": [
+        "防御候选从未执行；execution_supported 恒为 false。"
+      ]
+    },
+    {
+      "fixture_id": "fx-graph-001",
+      "file": "graph.json",
+      "data_mode": "synthetic",
+      "source": "fixed teaching graph for interaction visualisation",
+      "collected_at": "2026-10-24T04:55:35.681748+00:00",
+      "agentguard_version": "0.1.0-a7",
+      "agentguard_commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+      "sanitized": true,
+      "sha256": "e55a3588672d03801d221cfcf5b878d9ac0d5b1a6b14f631b15b17ceb99c4af8",
+      "capabilities": [
+        "interaction.graph.demo"
+      ],
+      "not_provable": [
+        "图谱边不代表真实消息级传输；风险分级为演示标注。"
+      ]
+    },
+    {
+      "fixture_id": "fx-experiments-001",
+      "file": "experiments.json",
+      "data_mode": "recorded",
+      "source": "sanitised experiment comparison records",
+      "collected_at": "2026-10-24T04:55:35.681748+00:00",
+      "agentguard_version": "0.1.0-a7",
+      "agentguard_commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+      "sanitized": true,
+      "sha256": "55b57ba4fe61efaa2cab249429094343ce531741a33669914cbcb5cfc27442ff",
+      "capabilities": [
+        "experiments.compare"
+      ],
+      "not_provable": [
+        "budget 数值为演示记录，不代表真实成本。"
+      ]
+    },
+    {
+      "fixture_id": "fx-experiences-001",
+      "file": "experiences.json",
+      "data_mode": "recorded",
+      "source": "sanitised verified experience records",
+      "collected_at": "2026-10-24T04:55:35.681748+00:00",
+      "agentguard_version": "0.1.0-a7",
+      "agentguard_commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+      "sanitized": true,
+      "sha256": "4a6ce23e18c4255222c2e983775ba9c64264287dee2e8f69a423af0794917188",
+      "capabilities": [
+        "experiences.read"
+      ],
+      "not_provable": [
+        "演示经验不得用于真实因果实验统计。"
+      ]
+    },
+    {
+      "fixture_id": "fx-reports-001",
+      "file": "reports.json",
+      "data_mode": "recorded",
+      "source": "derived from recorded investigation results",
+      "collected_at": "2026-10-24T04:55:35.681748+00:00",
+      "agentguard_version": "0.1.0-a7",
+      "agentguard_commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+      "sanitized": true,
+      "sha256": "939d6bd737909df9b779760fe061dd3007fec4dc2cd38ee2f56f53bfced57bb9",
+      "capabilities": [
+        "reports.read",
+        "reports.export"
+      ],
+      "not_provable": [
+        "报告指标与源数据一致，不推断新的因果结论。"
+      ]
+    }
+  ]
+}

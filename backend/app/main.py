@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,10 +18,17 @@ from fastapi.responses import JSONResponse
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.integrations.agentguard_client import AgentGuardClient, AgentGuardError
+from app.services.demo_service import DemoService
 from app.services.status_service import APP_NAME, APP_VERSION
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def _resolve_fixtures_dir(configured: str):
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return Path(__file__).resolve().parents[2] / "demo" / "fixtures"
 
 
 @asynccontextmanager
@@ -28,7 +36,10 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     app.state.settings = settings
     app.state.agentguard_client = AgentGuardClient(settings)
+    fixtures_dir = _resolve_fixtures_dir(settings.demo_fixtures_dir)
+    app.state.demo_service = DemoService(fixtures_dir)
     logger.info("BFF started; upstream AgentGuard fixed at %s", settings.agentguard_base_url)
+    logger.info("Demo fixtures loaded from %s", fixtures_dir)
     try:
         yield
     finally:

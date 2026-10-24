@@ -1,0 +1,84 @@
+{
+  "schema_version": "0.1",
+  "items": {
+    "inv-qwb-0001": {
+      "schema_version": "0.1",
+      "run_id": "run-qwb-0001",
+      "status": "preview_only",
+      "candidates": [
+        {
+          "candidate_id": "def-qwb-0001",
+          "risk": "tool_abuse",
+          "target": "agent-a:settlement",
+          "operation_type": "block",
+          "rationale": "证据 ev-qwb-0003/0004 表明结算工具越权调用可被阻断且未降低正常效用。",
+          "authorization_required": "operator approval",
+          "estimated_cost": { "tokens": 1200, "time_seconds": 30 },
+          "related_evidence": ["ev-qwb-0003", "ev-qwb-0004"],
+          "status": "pending_approval",
+          "execution_supported": false,
+          "execution_reason": "外部防御执行器尚未验证，应用层不执行防御操作。"
+        },
+        {
+          "candidate_id": "def-qwb-0002",
+          "risk": "prompt_injection",
+          "target": "agent-b:message-ingress",
+          "operation_type": "sanitize",
+          "rationale": "证据 ev-qwb-0002 显示注入特征消息进入处理链；建议入口清洗。",
+          "authorization_required": "operator approval + change review",
+          "estimated_cost": { "tokens": 400, "time_seconds": 10 },
+          "related_evidence": ["ev-qwb-0002"],
+          "status": "pending_approval",
+          "execution_supported": false,
+          "execution_reason": "外部防御执行器尚未验证，应用层不执行防御操作。"
+        }
+      ],
+      "policy_notes": ["预览仅生成或更新候选，不代表防御已经执行。", "候选执行需真实执行器与权限模型就绪。"],
+      "execution_performed": false,
+      "evidence_mode": "recorded"
+    },
+    "inv-qwb-0005": {
+      "schema_version": "0.1",
+      "run_id": "run-qwb-0005",
+      "status": "preview_only",
+      "candidates": [
+        {
+          "candidate_id": "def-qwb-0011",
+          "risk": "tool_abuse",
+          "target": "policy:whitelist-settlement",
+          "operation_type": "block",
+          "rationale": "防御评估运行（exp-qwb-003）验证白名单阻断不影响正常任务效用。",
+          "authorization_required": "admin approval",
+          "estimated_cost": { "tokens": 800, "time_seconds": 20 },
+          "related_evidence": ["ev-qwb-0011"],
+          "status": "approved",
+          "execution_supported": false,
+          "execution_reason": "外部防御执行器尚未验证，应用层不执行防御操作。"
+        }
+      ],
+      "policy_notes": ["该候选已通过审批但无真实执行能力；执行仍为 unsupported。"],
+      "execution_performed": false,
+      "evidence_mode": "synthetic"
+    },
+    "inv-qwb-0002": {
+      "schema_version": "0.1",
+      "run_id": "run-qwb-0002",
+      "status": "unsupported",
+      "candidates": [],
+      "policy_notes": ["调查运行中，尚未生成防御候选。"],
+      "execution_performed": false,
+      "evidence_mode": "unavailable"
+    }
+  },
+  "historical_outcomes": [
+    {
+      "outcome_id": "hist-def-0001",
+      "policy": "whitelist-settlement",
+      "operation_type": "block",
+      "status": "verified",
+      "verified_at": "2026-10-19T16:00:00+08:00",
+      "source": "recorded:exp-qwb-003",
+      "note": "录制样例：阻断策略在回放测试集上拦截全部越权调用，正常任务效用保持。"
+    }
+  ]
+}

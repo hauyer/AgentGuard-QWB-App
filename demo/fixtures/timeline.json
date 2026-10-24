@@ -1,0 +1,133 @@
+{
+  "schema_version": "0.1",
+  "items": [
+    {
+      "request_id": "inv-qwb-0001",
+      "step": "created",
+      "label": "调查创建",
+      "status": "completed",
+      "at": "2026-10-20T09:12:00+08:00",
+      "detail": "请求验证通过，威胁契约 contract-qwb-001"
+    },
+    {
+      "request_id": "inv-qwb-0001",
+      "step": "validated",
+      "label": "请求验证",
+      "status": "completed",
+      "at": "2026-10-20T09:12:03+08:00",
+      "detail": "模型与运行时标识通过格式校验"
+    },
+    {
+      "request_id": "inv-qwb-0001",
+      "step": "capabilities",
+      "label": "能力检查",
+      "status": "completed",
+      "at": "2026-10-20T09:12:05+08:00",
+      "detail": "causal_audit 模式可用；采集目标在支持范围内"
+    },
+    {
+      "request_id": "inv-qwb-0001",
+      "step": "planned",
+      "label": "审计计划",
+      "status": "completed",
+      "at": "2026-10-20T09:12:09+08:00",
+      "detail": "计划 plan-qwb-0001 已生成"
+    },
+    {
+      "request_id": "inv-qwb-0001",
+      "step": "submitted",
+      "label": "运行提交",
+      "status": "completed",
+      "at": "2026-10-20T09:12:11+08:00",
+      "detail": "WARDEN 接受运行，run-qwb-0001"
+    },
+    {
+      "request_id": "inv-qwb-0001",
+      "step": "running",
+      "label": "运行中",
+      "status": "completed",
+      "at": "2026-10-20T09:12:11+08:00",
+      "detail": "观测 42 条消息 / 17 次工具调用"
+    },
+    {
+      "request_id": "inv-qwb-0001",
+      "step": "evidence",
+      "label": "证据生成",
+      "status": "completed",
+      "at": "2026-10-20T09:14:30+08:00",
+      "detail": "生成 4 条受治理证据"
+    },
+    {
+      "request_id": "inv-qwb-0001",
+      "step": "completed",
+      "label": "调查完成",
+      "status": "completed",
+      "at": "2026-10-20T09:14:40+08:00",
+      "detail": "结果与候选路径已关联"
+    },
+    {
+      "request_id": "inv-qwb-0002",
+      "step": "created",
+      "label": "调查创建",
+      "status": "completed",
+      "at": "2026-10-20T10:02:00+08:00",
+      "detail": "detection 模式，运行时检测"
+    },
+    {
+      "request_id": "inv-qwb-0002",
+      "step": "submitted",
+      "label": "运行提交",
+      "status": "completed",
+      "at": "2026-10-20T10:02:20+08:00",
+      "detail": "WARDEN 接受运行，run-qwb-0002"
+    },
+    {
+      "request_id": "inv-qwb-0002",
+      "step": "running",
+      "label": "运行中",
+      "status": "running",
+      "at": "2026-10-20T10:05:10+08:00",
+      "detail": "已观测 18 条消息，证据尚未生成"
+    },
+    {
+      "request_id": "inv-qwb-0003",
+      "step": "created",
+      "label": "调查创建",
+      "status": "completed",
+      "at": "2026-10-20T10:30:00+08:00",
+      "detail": "提交 causal_audit 审计请求"
+    },
+    {
+      "request_id": "inv-qwb-0003",
+      "step": "capabilities",
+      "label": "能力检查",
+      "status": "blocked",
+      "at": "2026-10-20T10:30:45+08:00",
+      "detail": "采集目标不在受支持范围，计划被阻塞"
+    },
+    {
+      "request_id": "inv-qwb-0004",
+      "step": "created",
+      "label": "调查创建",
+      "status": "completed",
+      "at": "2026-10-20T11:00:00+08:00",
+      "detail": "observation 模式"
+    },
+    {
+      "request_id": "inv-qwb-0004",
+      "step": "submitted",
+      "label": "运行提交",
+      "status": "completed",
+      "at": "2026-10-20T11:00:15+08:00",
+      "detail": "run-qwb-0004"
+    },
+    {
+      "request_id": "inv-qwb-0004",
+      "step": "evidence",
+      "label": "证据生成",
+      "status": "failed",
+      "at": "2026-10-20T11:02:20+08:00",
+      "detail": "观测缓存写入超时，运行失败"
+    }
+  ]
+}

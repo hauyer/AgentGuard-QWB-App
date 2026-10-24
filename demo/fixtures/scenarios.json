@@ -1,0 +1,21 @@
+{
+  "schema_version": "0.1",
+  "items": [
+    {
+      "scenario_id": "sc-qwb-001",
+      "name": "多智能体供应链工具调用滥用审计",
+      "description": "演示场景：一组多智能体协作完成供应链单据处理，其中模型 A 被提示注入诱导，绕过工具白名单调用内部结算工具并尝试外发数据。平台围绕该场景展示调查、交互图谱、证据、防御候选、实验对比与报告。",
+      "risk_types": ["tool_abuse", "prompt_injection", "supply_chain", "exfiltration"],
+      "graph_fixture": "fx-graph-001",
+      "steps": [
+        { "key": "overview", "label": "系统总览", "path": "/" },
+        { "key": "graph", "label": "查看 Agent 交互", "path": "/interaction-graph" },
+        { "key": "investigations", "label": "查看调查过程", "path": "/investigations" },
+        { "key": "evidence", "label": "查看证据和限制", "path": "/evidence" },
+        { "key": "defense", "label": "查看防御候选", "path": "/defenses" },
+        { "key": "experiments", "label": "查看实验比较", "path": "/experiments" },
+        { "key": "reports", "label": "生成报告", "path": "/reports" }
+      ]
+    }
+  ]
+}
