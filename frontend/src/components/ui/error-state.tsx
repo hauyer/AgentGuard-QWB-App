@@ -16,6 +16,7 @@ const KIND_META: Record<
 
 export function ErrorState({
   kind = "generic",
+  title,
   message,
   code,
   requestId,
@@ -24,6 +25,8 @@ export function ErrorState({
   children,
 }: {
   kind?: ErrorStateKind;
+  /** Overrides the preset title for this kind. */
+  title?: string;
   message?: string;
   code?: string;
   requestId?: string | null;
@@ -34,12 +37,14 @@ export function ErrorState({
   const meta = KIND_META[kind];
   const Icon = meta.icon;
   const toneText = meta.tone === "red" ? "text-red-700" : "text-amber-700";
+  const heading = title ?? meta.title;
   return (
     <div className="flex flex-col items-start gap-3 rounded-lg border border-surface-border bg-surface p-4">
       <div className={cn("flex items-center gap-2 text-sm font-medium", toneText)}>
         <Icon aria-hidden className="h-5 w-5" />
-        <span>{message ?? meta.title}</span>
+        <span>{heading}</span>
       </div>
+      {message && message !== heading && <p className="text-sm text-slate-600">{message}</p>}
       {(code || requestId) && (
         <p className="font-mono text-xs text-slate-500">
           {code && <span>错误码：{code}</span>}

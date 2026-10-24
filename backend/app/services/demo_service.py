@@ -25,7 +25,15 @@ class DemoService:
         self._dir = fixtures_dir
         self._index: list[dict] = []
         self._cache: dict[str, dict] = {}
+        self._overlay: dict[str, dict] = {}
         self._load_index()
+
+    # ------------------------------------------------------------------ #
+    # demo-only submission overlay (never a real WARDEN run)
+    # ------------------------------------------------------------------ #
+    def record_demo_investigation(self, request_id: str, item: dict) -> dict:
+        self._overlay[request_id] = item
+        return item
 
     def _load_index(self) -> None:
         index_path = self._dir / "index.json"
@@ -63,6 +71,9 @@ class DemoService:
     # ------------------------------------------------------------------ #
     def list_investigations(self, *, status: str | None = None, limit: int = 50, offset: int = 0) -> dict:
         items = list(self.fixture("investigations.json")["items"])
+        for item in self._overlay.values():
+            if item.get("request_id") not in {existing.get("request_id") for existing in items}:
+                items.append(item)
         if status:
             items = [item for item in items if item.get("status") == status]
         total = len(items)
@@ -77,11 +88,31 @@ class DemoService:
         }
 
     def get_investigation(self, request_id: str) -> dict | None:
+        if request_id in self._overlay:
+            return dict(self._overlay[request_id])
         details = self.fixture("investigations.json").get("details", {})
         item = details.get(request_id)
         return dict(item) if item else None
 
     def get_timeline(self, request_id: str) -> list[dict]:
+        if request_id in self._overlay:
+            item = self._overlay[request_id]
+            events = [
+                {"step": "created", "label": "调查创建", "status": "completed", "at": item.get("created_at")}
+            ]
+            # Only the creation step is confirmed for a demo-only submission;
+            # every later step stays pending - nothing was actually run.
+            for step, label in [
+                ("validated", "请求验证"),
+                ("capabilities", "能力检查"),
+                ("planned", "审计计划"),
+                ("submitted", "运行提交"),
+                ("running", "运行中"),
+                ("evidence", "证据生成"),
+                ("completed", "调查完成"),
+            ]:
+                events.append({"step": step, "label": label, "status": "pending", "at": None})
+            return events
         items = self.fixture("timeline.json")["items"]
         return [event for event in items if event.get("request_id") == request_id]
 

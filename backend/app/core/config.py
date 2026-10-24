@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     database_url: str | None = None
     demo_fixtures_dir: str = ""
 
+    # --- application auth (B8) ---
+    # auth_enabled=false grants an implicit local admin session for development
+    # only; production must set AUTH_ENABLED=true and a strong APP_SECRET_KEY.
+    auth_enabled: bool = False
+    app_secret_key: str = ""
+    session_cookie_name: str = "qwb_session"
+    csrf_cookie_name: str = "qwb_csrf"
+    session_max_age_seconds: int = 8 * 60 * 60
+
     @field_validator("agentguard_base_url")
     @classmethod
     def validate_agentguard_base_url(cls, value: str) -> str:

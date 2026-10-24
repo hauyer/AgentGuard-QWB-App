@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
-from pathlib import Path
 
 from app.main import create_app
 from app.services.demo_service import DemoFixtureError, DemoService

@@ -2,15 +2,7 @@ import { ShieldAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { useAuthStore } from "../../stores/auth-store";
-
-export type Role = "viewer" | "analyst" | "operator" | "admin";
-
-const ROLE_ORDER: Role[] = ["viewer", "analyst", "operator", "admin"];
-
-export function hasRole(required: Role, current: Role | null | undefined): boolean {
-  if (!current) return false;
-  return ROLE_ORDER.indexOf(current) >= ROLE_ORDER.indexOf(required);
-}
+import { hasRole, type Role } from "../../utils/roles";
 
 /**
  * Role gate. When the current session does not have the required role the
