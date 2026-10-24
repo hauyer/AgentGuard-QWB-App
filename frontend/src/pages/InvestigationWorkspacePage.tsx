@@ -1,8 +1,12 @@
 import { Link, useParams } from "react-router-dom";
+import { useState } from "react";
 
 import { useInvestigation, useTimeline } from "../hooks/use-investigations";
 import { useGraph } from "../hooks/use-graph";
 import { useReport } from "../hooks/use-reports";
+import { useLinkInvestigationToProject, useProjects } from "../hooks/use-projects";
+import { useAuthStore } from "../stores/auth-store";
+import { hasRole } from "../utils/roles";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -227,6 +231,71 @@ export function InvestigationWorkspacePage() {
           </div>
         </Card>
       </div>
+
+      <ProjectLinkPanel requestId={requestId} />
     </div>
+  );
+}
+
+/** B18: link this investigation to one of the caller's projects (server
+ * verifies existence per data mode and audits the operation). */
+function ProjectLinkPanel({ requestId }: { requestId: string }) {
+  const role = useAuthStore((state) => state.role);
+  const canManage = hasRole("analyst", role);
+  const projects = useProjects(50, 0);
+  const link = useLinkInvestigationToProject();
+  const [selectedProject, setSelectedProject] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const activeProjects = (projects.data?.items ?? []).filter((project) => project.status === "active");
+
+  if (!canManage) {
+    return (
+      <Card title="项目归属" description="viewer 角色只读；关联调查需要 analyst 及以上且为项目成员">
+        <p className="text-xs text-slate-500">当前角色无法执行项目关联操作。</p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="项目归属" description="将本调查引用挂到项目下（服务端验证调查存在并写审计）">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <select
+          value={selectedProject}
+          onChange={(event) => setSelectedProject(event.target.value)}
+          className="w-64 rounded-md border border-surface-border px-2 py-1.5"
+        >
+          <option value="">选择项目…</option>
+          {activeProjects.map((project) => (
+            <option key={project.project_id} value={project.project_id}>
+              {project.name}
+            </option>
+          ))}
+        </select>
+        <Button
+          variant="secondary"
+          disabled={!selectedProject || link.isPending}
+          onClick={() =>
+            void (async () => {
+              setError(null);
+              setMessage(null);
+              try {
+                await link.mutateAsync({ projectId: Number(selectedProject), requestId });
+                setMessage(`已关联到项目（verification 结果见该项目的调查引用列表）`);
+              } catch (linkError) {
+                setError(linkError instanceof Error ? linkError.message : "关联失败");
+              }
+            })()
+          }
+        >
+          关联调查
+        </Button>
+        {message && <span className="text-emerald-700">{message}</span>}
+        {error && <span className="text-red-700">{error}</span>}
+        {!projects.isLoading && activeProjects.length === 0 && (
+          <span className="text-slate-400">暂无可关联的活跃项目（项目管理页可创建）。</span>
+        )}
+      </div>
+    </Card>
   );
 }

@@ -1,11 +1,17 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { fetchExperiences, fetchExperiments, fetchReport } from "../services/reports";
+import { fetchExperiences, fetchExperiments, fetchReport, postExperimentsCompare } from "../services/reports";
 
 export function useExperiments() {
   return useQuery({
     queryKey: ["experiments"],
     queryFn: ({ signal }) => fetchExperiments(signal),
+  });
+}
+
+export function useExperimentCompare() {
+  return useMutation({
+    mutationFn: ({ runIds }: { runIds: string[] }) => postExperimentsCompare(runIds),
   });
 }
 

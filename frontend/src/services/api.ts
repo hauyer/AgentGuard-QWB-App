@@ -37,6 +37,27 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return parseResponse<T>(response);
 }
 
+export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return parseResponse<T>(response);
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json", "X-CSRF-Token": getCsrfToken() },
+  });
+  return parseResponse<T>(response);
+}
+
 /**
  * Double-submit CSRF token: the BFF issues a signed cookie and the same token
  * must be echoed on every mutating request. The browser never needs to know

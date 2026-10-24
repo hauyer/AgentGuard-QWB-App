@@ -1,10 +1,15 @@
 import type { ExperimentsResponse, ExperiencesResponse, ReportResponse } from "../types/reports";
-import { apiGet } from "./api";
+import { apiGet, apiPost } from "./api";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
 export function fetchExperiments(signal?: AbortSignal): Promise<ExperimentsResponse> {
   return apiGet<ExperimentsResponse>("/experiments", signal);
+}
+
+/** B13 controlled comparison: the backend verifies comparability first. */
+export function postExperimentsCompare(runIds: string[]): Promise<unknown> {
+  return apiPost<unknown>("/experiments/compare", { run_ids: runIds });
 }
 
 export function fetchReport(runId: string, signal?: AbortSignal): Promise<ReportResponse> {

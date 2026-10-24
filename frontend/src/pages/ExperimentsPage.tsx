@@ -1,11 +1,25 @@
+import { useState } from "react";
+
 import { useAuthStore } from "../stores/auth-store";
 import { useExperiments } from "../hooks/use-reports";
+import { useExperimentCompare } from "../hooks/use-reports";
 import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ErrorState } from "../components/ui/error-state";
 import { PageHeader } from "../components/shared/page-header";
 import { DemoBanner } from "../components/shared/demo-banner";
 import type { Experiment } from "../types/reports";
+import { cn } from "../utils/cn";
+
+interface CompareResult {
+  meta?: { data_mode?: string; capability?: string };
+  comparable?: boolean;
+  reasons?: string[];
+  entries?: Array<Record<string, unknown>>;
+  comparison?: Record<string, unknown>;
+  run_ids?: string[];
+}
 
 export function ExperimentsPage() {
   const role = useAuthStore((state) => state.role);
@@ -72,11 +86,104 @@ export function ExperimentsPage() {
         </Card>
       )}
 
+      <ExperimentComparePanel
+        runIds={items.map((item) => item.run_id).filter((value): value is string => Boolean(value))}
+      />
+
       <p className="text-[11px] text-slate-400">
-        当前角色：<span className="font-mono">{role ?? "未登录"}</span>。Live 模式下 AgentGuard 公共 API 未提供
-        实验对比列表（EXPERIMENTS_UNAVAILABLE），不会用虚构数据生成趋势。
+        当前角色：<span className="font-mono">{role ?? "未登录"}</span>。受控对比仅在 Live 模式开放，
+        合成实验不与真实证据混入同一统计系列；不可比时展示原因而非伪造提升率。
       </p>
     </div>
+  );
+}
+
+/** B18: controlled comparison over the B13 backend contract. Incomparable
+ * input is answered with explicit reasons - never a fabricated improvement. */
+function ExperimentComparePanel({ runIds }: { runIds: string[] }) {
+  const compare = useExperimentCompare();
+  const [selection, setSelection] = useState<Set<string>>(new Set<string>());
+
+  const toggle = (runId: string) => {
+    setSelection((previous) => {
+      const next = new Set(previous);
+      if (next.has(runId)) next.delete(runId);
+      else if (next.size < 20) next.add(runId);
+      return next;
+    });
+  };
+
+  const result = compare.data as CompareResult | undefined;
+
+  return (
+    <Card
+      title="受控实验对比"
+      description="选择 2–20 个 run_id；服务端先验证可比性（同场景、指标可用、证据等级不混合）"
+    >
+      {runIds.length === 0 ? (
+        <p className="text-xs text-slate-500">当前没有可参与对比的 run。</p>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-1.5">
+            {runIds.map((runId) => (
+              <button
+                key={runId}
+                type="button"
+                onClick={() => toggle(runId)}
+                className={cn(
+                  "rounded-md border px-2 py-0.5 font-mono text-[11px]",
+                  selection.has(runId)
+                    ? "border-brand-600 bg-brand-50 text-brand-700"
+                    : "border-surface-border text-slate-600 hover:bg-surface-muted",
+                )}
+              >
+                {runId}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              disabled={selection.size < 2 || compare.isPending}
+              onClick={() =>
+                void compare.mutateAsync({ runIds: [...selection] }).catch(() => undefined)
+              }
+            >
+              {compare.isPending ? "对比中…" : "发起对比"}
+            </Button>
+            <span className="text-[11px] text-slate-400">已选 {selection.size} 个</span>
+          </div>
+          {compare.isError && (
+            <p className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+              {compare.error instanceof Error ? compare.error.message : "对比失败"}
+            </p>
+          )}
+          {result && (
+            <div className="space-y-2 text-xs">
+              {result.comparable === false ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-2">
+                  <p className="font-medium text-amber-800">不可比，未计算任何提升率：</p>
+                  <ul className="mt-1 list-inside list-disc text-amber-700">
+                    {(result.reasons ?? []).map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="rounded-md border border-surface-border p-2">
+                  <p className="font-medium text-slate-700">
+                    对比结果（run_ids: {(result.run_ids ?? []).join(", ")}）
+                  </p>
+                  <pre className="mt-1 overflow-auto rounded bg-surface-muted p-2 font-mono text-[10px] text-slate-700">
+                    {JSON.stringify(result.comparison ?? {}, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 

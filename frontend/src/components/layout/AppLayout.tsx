@@ -2,6 +2,7 @@ import {
   BarChart3,
   BookOpenText,
   FlaskConical,
+  FolderKanban,
   LayoutDashboard,
   Network,
   PlayCircle,
@@ -22,6 +23,7 @@ import { StatusDot } from "../ui/status-dot";
 const NAV_ITEMS = [
   { to: "/", label: "系统总览", icon: LayoutDashboard, end: true },
   { to: "/demo", label: "演示导览", icon: PlayCircle },
+  { to: "/projects", label: "项目管理", icon: FolderKanban },
   { to: "/investigations", label: "安全调查", icon: Target },
   { to: "/interaction-graph", label: "交互图谱", icon: Network },
   { to: "/evidence", label: "证据分析", icon: ScrollText },
