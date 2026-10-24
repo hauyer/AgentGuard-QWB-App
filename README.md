@@ -27,7 +27,7 @@ WARDEN     ── 底层因果审计内核（只读，不直接访问）
   负责系统状态、业务数据、服务端凭证、AgentGuard REST 调用、响应转换与审计。
   不重新实现 AgentGuard 的调查、证据门控、经验学习和策略算法。
 
-## 当前进度（B0–B8 全部完成）
+## 当前进度（B0–B17 全部完成，候选发布 1.0.0-rc1）
 
 - [x] **B0** 独立 Git 仓库初始化，前后端基础工程可运行；AgentGuard 接口基线固定：
   `feature/agentguard-upper-layer-v1` @
@@ -112,6 +112,35 @@ WARDEN     ── 底层因果审计内核（只读，不直接访问）
         图谱/实验列表/防御执行维持 QWB-INT-001/002/006 阻塞，不伪造数据
       - Live/Recorded/Synthetic/Unavailable 严格分离：强制 `live` 上游不可达时降级
         `unavailable`，绝不假装 LIVE
+- [x] **B11** 新分支工程验收与质量基线：live check 五分类严格判定
+      （PASS/FAIL/SKIP_NOT_CONFIGURED/BLOCKED_UPSTREAM/UNSUPPORTED，阻塞需真实证据）；
+      合同脚本 METHOD/path 对比修复；CI 七任务（backend/migrations/frontend/e2e/
+      contract-check/live-smoke 可选/docker）；迁移链验证脚本与功能验证脚本沉淀；
+      接口固定更新至 `907aa19`（C1 图谱 + C2 实验索引发布）；交付
+      docs/development/B11_BASELINE.md、B11_TEST_REPORT.md、B11_API_STATUS.md
+- [x] **B12** 项目管理与权限隔离：迁移 0003（projects 增强/username 成员/
+      project_investigations/审计 project_id）；双层角色（全局 × 项目成员），
+      非成员 404 不暴露存在性；成员/停用变更下次请求即生效；调查关联按数据模式
+      验证存在性（不可达拒绝关联不伪造）；全部写操作持久化审计并支持
+      project_id/since/until 过滤；14 项隔离测试
+- [x] **B13** AgentGuard 新接口渐进式接入：能力发现 `discover_operations()`
+      （OpenAPI 驱动，8 端点跟踪）；C1 图谱真实适配（诚实空图谱透传，溯源 ID
+      全保留）；C2 实验索引 + 受控对比（可比性门控：同场景/指标可用/合成不混真实，
+      不可比给原因）；时间线上游事件优先（derived 显式标注）
+- [x] **B14** 调查工作台：`/investigations/:id/workspace` 单页整合状态/时间线/
+      图谱/风险/证据/防御/报告（全部真实 ID 联动）；调查列表关键字搜索与工作区入口；
+      完整状态映射（含 submission_ambiguous）
+- [x] **B15/B16** 证据链、稳定性与安全专项：登录限速（10/5min）+ 登录审计；
+      并发竞态修复（UNIQUE 兜底转 409）；PDF 导出文件名清洗；性能实测
+      （B16_PERF.md：Dashboard p50 18.5ms、列表 15.4ms、PDF 21.7ms、
+      1000 节点图谱转换 2.2ms、50 并发只读全 200）
+- [x] **B17** 强网杯交付：docs/competition/ 十份文档（总览/架构/创新点/技术实现/
+      实验设计/实验结果/演示脚本/部署指南/测试报告/已知限制）；候选发布
+      **1.0.0-rc1** 冻结
+
+最终验收（2026-10-24）：后端 pytest **173 passed** / ruff 0；前端 vitest **53 passed**
++ typecheck/lint/build 绿；Playwright 1 passed（真实栈）；迁移链 rc=0；
+真实联调 12 PASS / 0 FAIL / 2 BLOCKED_UPSTREAM / 1 UNSUPPORTED（严格判定）。
 - [x] **MVP 验收清单**：前后端独立运行、统一界面导航、连接状态真实展示、调查闭环、
       图谱与证据带来源、防御候选不伪造执行、报告导出、离线 Demo 完整、凭证不泄漏、
       测试与构建通过、部署文档完整、不直接调用底层三仓库、不修改 AgentGuard 内核

@@ -25,7 +25,7 @@ from app.schemas.system import (
 logger = logging.getLogger(__name__)
 
 APP_NAME = "agentguard-qwb-app"
-APP_VERSION = "0.1.0"
+APP_VERSION = "1.0.0-rc1"
 
 # feature name -> whether it depends on more than AgentGuard reachability
 _FEATURES: dict[str, str] = {
