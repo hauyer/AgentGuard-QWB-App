@@ -103,10 +103,14 @@ def reports_export_pdf(
         pdf = render_report_pdf(payload, meta)
     except ReportsServiceError as exc:
         return _error_response(exc)
+    # Sanitize: run_id must not carry header-breaking or path characters.
+    import re
+
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", run_id)[:80] or "report"
     return Response(
         content=pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="report-{run_id}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="report-{safe_name}.pdf"'},
     )
 
 

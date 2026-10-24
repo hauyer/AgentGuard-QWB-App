@@ -109,7 +109,12 @@ def test_analyst_can_create_and_audit_records_mutation() -> None:
     audit = client.get("/api/audit/events").json()
     assert audit["count"] >= 1
     assert any(event["action"] == "investigation.create" and event["target"] == request_id for event in audit["items"])
-    assert all(event["actor"] == "analyst" for event in audit["items"])
+    assert any(event["action"] == "auth.login.success" for event in audit["items"])
+    # B16: auth events are audited too; the mutation itself is still the analyst's
+    assert all(
+        event["actor"] == "analyst"
+        for event in audit["items"] if event["action"] == "investigation.create"
+    )
 
 
 def test_audit_route_requires_operator() -> None:

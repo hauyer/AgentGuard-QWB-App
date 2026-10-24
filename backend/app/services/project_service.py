@@ -17,6 +17,7 @@ from __future__ import annotations
 import dataclasses
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import Settings
 from app.core.data_mode import DataMode, effective_data_mode
@@ -184,7 +185,14 @@ def add_member(
         member = ProjectMember(project_id=project.id, username=username, role=role,
                                added_by=actor.username)
         session.add(member)
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            # The unique constraint is the concurrency authority: two parallel
+            # adds must end with one membership and an explicit 409, never a 500.
+            session.rollback()
+            raise ProjectServiceError(409, "MEMBER_EXISTS",
+                                      f"用户已是项目成员：{username}") from exc
         return {"username": member.username, "role": member.role,
                 "added_by": member.added_by,
                 "added_at": member.created_at.isoformat() if member.created_at else None}
@@ -274,7 +282,12 @@ def link_investigation(
             verification=verification,
         )
         session.add(row)
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            session.rollback()
+            raise ProjectServiceError(409, "INVESTIGATION_LINKED",
+                                      f"该调查已关联到此项目：{agentguard_request_id}") from exc
         return _investigation_payload(row)
 
 
