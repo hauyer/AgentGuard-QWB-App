@@ -27,7 +27,7 @@ WARDEN     ── 底层因果审计内核（只读，不直接访问）
   负责系统状态、业务数据、服务端凭证、AgentGuard REST 调用、响应转换与审计。
   不重新实现 AgentGuard 的调查、证据门控、经验学习和策略算法。
 
-## 当前进度（B0–B5）
+## 当前进度（B0–B6）
 
 - [x] **B0** 独立 Git 仓库初始化，前后端基础工程可运行；AgentGuard 接口基线固定：
   `feature/agentguard-upper-layer-v1` @
@@ -58,9 +58,14 @@ WARDEN     ── 底层因果审计内核（只读，不直接访问）
       “因果路径已确认”），工件引用只展示元信息；防御候选展示权限要求/预计成本/相关
       证据，execution_supported 恒 false 时不开放执行按钮；预览仅 persist 不执行，
       demo 模式 preview 显式返回 409 DEMO_READONLY（不假装提交/审批）
-- [x] 后端 pytest（83 passed）、ruff 0、前端 vitest（42 passed）/ typecheck / lint /
+- [x] **B6** 实验对比、报告与经验中心：`GET /api/experiments`（比较维度表，live 无
+      公共列表接口时显式 503 EXPERIMENTS_UNAVAILABLE，绝不虚构趋势）、
+      `GET /api/reports/{run_id}` + `GET /api/reports/{run_id}/export`（应用层 reportlab
+      生成 PDF：仅排版报告字段，不改指标、不推断新因果结论；pypdf 文本级验证）、
+      `GET /api/experiences`（已验证经验展示与查询，第一版不做 Thompson Sampling）
+- [x] 后端 pytest（94 passed）、ruff 0、前端 vitest（46 passed）/ typecheck / lint /
       build 全绿、CI 工作流、Docker 构建
-- [ ] B6 实验/报告/经验 → B7 离线 Demo 完善 →
+- [ ] B7 离线 Demo 完善 →
       B8 权限/部署/发布
 
 ## 快速开始
