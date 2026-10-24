@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request
 
 from app.core.security import verify_csrf, verify_session
-from app.services.auth_service import AppUser, has_role, local_dev_user
+from app.services.auth_service import AppUser, find_user, has_role, local_dev_user
 
 USER_KEY = "qwb_current_user"
 
@@ -24,16 +24,11 @@ def get_current_user(request: Request) -> AppUser:
     username = verify_session(settings, session)
     if username is None:
         raise HTTPException(status_code=401, detail={"error": "AUTH_REQUIRED", "message": "请先登录"})
-    user = _find_user(username)
+    user = find_user(settings, username)
     if user is None:
+        # Session signature is valid but the account is gone or deactivated.
         raise HTTPException(status_code=401, detail={"error": "AUTH_REQUIRED", "message": "会话无效"})
     return user
-
-
-def _find_user(username: str) -> AppUser | None:
-    from app.services.auth_service import DEMO_USERS
-
-    return DEMO_USERS.get(username)
 
 
 def require_role(required: str):

@@ -1,0 +1,47 @@
+# Production-oriented stack (B9). Overlay on docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Required environment (the backend fail-closes at startup without them):
+#   APP_SECRET_KEY          strong random secret (>= 32 chars)
+#   POSTGRES_PASSWORD       database password (not the dev default)
+#   APP_CORS_ORIGINS        explicit public origin(s) of the TLS entry point
+#
+# Network entry: this file intentionally publishes nothing. Put a TLS
+# terminating reverse proxy (nginx/traefik/ALB) in front on a separate compose
+# service or host; point it at frontend:80 and keep backend on qwb-internal
+# only. Never map backend ports to a public interface.
+
+services:
+  backend:
+    environment:
+      APP_ENV: production
+      AUTH_ENABLED: "true"
+      SESSION_COOKIE_SECURE: "true"
+      DATABASE_URL: postgresql+psycopg://qwb:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD for production}@postgres:5432/agentguard_qwb
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?set APP_SECRET_KEY for production (python -c "import secrets;print(secrets.token_hex(32))")}
+      APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:?set APP_CORS_ORIGINS to the public origin(s)}
+    ports: !override []
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  frontend:
+    ports: !override []
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  postgres:
+    profiles: !override []
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD for production}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

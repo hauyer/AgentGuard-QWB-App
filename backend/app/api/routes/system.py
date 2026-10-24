@@ -37,6 +37,9 @@ def system_settings(request: Request, user: CurrentUserDep) -> dict:
     return {
         "meta": {"data_mode": settings.app_data_mode or "live"},
         "auth_enabled": settings.auth_enabled,
+        "app_env": settings.app_env,
+        "demo_users_enabled": settings.demo_users_enabled and settings.auth_enabled,
+        "audit_persisted": bool(settings.database_url),
         "current_user": user.to_public() if settings.auth_enabled else None,
         "roles": [
             {"name": "Viewer", "description": "只读调查和报告。"},

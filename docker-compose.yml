@@ -1,3 +1,15 @@
+# Local development stack (default).
+#
+# Security posture (B9):
+#   * Published ports bind to the loopback interface only. The stack is
+#     reachable from the host machine, never from the network by accident.
+#   * Authentication stays off and audit events are memory-buffered unless a
+#     DATABASE_URL is provided - this file is for development, not exposure.
+#   * For production use docker-compose.prod.yml: it requires APP_SECRET_KEY,
+#     AUTH_ENABLED, PostgreSQL and an explicit public entry point (reverse
+#     proxy with TLS). The backend refuses to start in APP_ENV=production
+#     without those (fail closed in app/core/config.py).
+
 services:
   backend:
     build:
@@ -6,13 +18,15 @@ services:
     environment:
       APP_HOST: 0.0.0.0
       APP_PORT: "8001"
+      APP_ENV: ${APP_ENV:-development}
       AGENTGUARD_BASE_URL: ${AGENTGUARD_BASE_URL:-http://host.docker.internal:8000}
       AGENTGUARD_API_TOKEN: ${AGENTGUARD_API_TOKEN:-}
       AGENTGUARD_OPERATOR_API_TOKEN: ${AGENTGUARD_OPERATOR_API_TOKEN:-}
       APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost:5173}
       DATABASE_URL: ${DATABASE_URL:-}
     ports:
-      - "8001:8001"
+      # Loopback-only publish: do not expose the BFF to other hosts directly.
+      - "127.0.0.1:8001:8001"
     volumes:
       - backend-data:/srv/backend/data
     healthcheck:
@@ -20,7 +34,6 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-    # B0 default: private network only. Do not publish 8001 to public networks.
     networks:
       - qwb-internal
 
@@ -32,11 +45,13 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "5173:80"
+      # Loopback-only publish; put a TLS reverse proxy in front for real users.
+      - "127.0.0.1:5173:80"
     networks:
       - qwb-internal
 
-  # PostgreSQL for formal deployments (B8). Single-machine development may use SQLite.
+  # PostgreSQL for formal deployments (B8/B9). Single-machine development may
+  # use SQLite. Production (docker-compose.prod.yml) requires it.
   postgres:
     image: postgres:16-alpine
     environment:

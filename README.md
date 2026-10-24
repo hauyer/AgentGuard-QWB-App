@@ -73,14 +73,45 @@ WARDEN     ── 底层因果审计内核（只读，不直接访问）
         report_exports/demo_scenarios/ui_preferences/app_audit_events）+ Alembic
         初始迁移 `0001`（SQLite/PostgreSQL 均可执行，含升级/降级测试）
       - 业务操作审计：`GET /api/audit/events`（Operator+），调查创建与防御预览
-        自动记录 actor/action/target/detail（内存有界缓冲，可扩展持久化到表）
+        自动记录 actor/action/target/detail
       - 会话 Cookie 属性可配置：HttpOnly + SameSite=Lax 恒开，`SESSION_COOKIE_SECURE`
-        支持 HTTPS 部署；`GET /api/system/settings` 返回数据模式/认证状态/角色说明；
-        `/settings` 页面展示角色与安全边界（Operator 不自动映射 AgentGuard 高权限）
-      - 安全回归测试：Token 不泄漏、Cookie 标志、viewer 不可建调查、审计角色门控、
-        上游 URL 拒绝凭证/路径（SSRF 防护）——后端 pytest（106 passed）/ ruff 0
-      - 前端 vitest（51 passed）/ typecheck / lint / build 全绿；CI 五任务
+        支持 HTTPS 部署；`GET /api/system/settings` 返回数据模式/认证状态/角色说明
+      - 前端 vitest / typecheck / lint / build 全绿；CI 五任务
         （backend/frontend/e2e/contract-check/docker）覆盖真实联调标 skipped
+- [x] **B9** 生产安全加固（fail closed）：
+      - `AUTH_ENABLED=true` 未配置 `APP_SECRET_KEY` 时**拒绝启动**（移除固定后备密钥，
+        签名层二次防御 `SecretKeyNotConfigured`）；新增 `APP_ENV=development|demo|production`，
+        production 强制认证 + ≥32 字符密钥 + HTTPS Cookie + DATABASE_URL，缺失即启动失败
+      - 硬编码 Demo 账号仅限 development/demo 环境（production 恒拒绝，显式覆盖无效）；
+        正式认证使用 `users` 表 + PBKDF2-SHA256 密码哈希（迁移 `0002`，
+        `scripts/manage_users.py` 创建/改密/停用；停用即时失效已有会话；数据库不可用时 fail closed）
+      - 审计事件持久化到 `app_audit_events`（DATABASE_URL 配置时启动自动 Alembic 升级）；
+        `/api/audit/events` 支持 limit/offset 分页与 actor/action 过滤，服务重启可查，
+        内存模式显式返回 `persisted=false`
+      - 连接器 `trust_env=False`：上游请求不再经过环境/系统代理（防止
+        X-AgentGuard-Token 泄露给不可控代理）；BFF 响应统一补 `nosniff/DENY/no-referrer` 安全头
+      - Docker Compose 默认端口绑定 `127.0.0.1` 回环；新增 `docker-compose.prod.yml`
+        （生产要求显式密钥/口令/CORS，后端端口不发布，要求外部 TLS 反代）
+      - PDF 导出对上游字段做 XML 转义（防 reportlab 标记注入）；CSRF Cookie 与会话同周期；
+        登录失败不区分用户名存在性
+      - 安全回归测试 34 项（tests/test_b9_security.py）：fail-closed 配置矩阵、Demo 门控、
+        DB 用户登录/停用、审计持久化/分页/重启恢复、代理不可劫持、PDF 转义、
+        会话过期、模式分离等——后端 pytest 140 passed / ruff 0
+- [x] **B10** AgentGuard 真实接口联调（基线更新 `7d42809`，1.0.0rc1 A8）：
+      - OpenAPI 差异报告 `docs/api/AGENTGUARD_OPENAPI_DIFF_B10.md`：13 个业务端点
+        100% 兼容；A8 新增隐藏真值元数据拒绝（BFF 合同同步实现）、422 清洗、
+        创建响应改用 `workflow_id`（200 语义）
+      - 真实服务联调（AgentGuard 1.0.0rc1 + WARDEN 0.2.0 内核）：
+        `scripts/live_agentguard_check.py` **13 PASS / 1 BLOCKED-UPSTREAM / 0 FAIL**
+        （health/capabilities/kernel/scenarios/调查创建/幂等/详情/证据/报告/经验/审计门禁）
+      - 调查超时幂等恢复：POST 永不自动重试；模糊超时只读对账——上游确认存在则返回
+        真实记录（`recovered_after_timeout`）、确认不存在报 `SUBMISSION_NOT_RECORDED`、
+        对账不可用报 `SUBMISSION_AMBIGUOUS`；`wait_for_completion` 超时预算校验
+      - 新增阻塞登记 QWB-INT-008（上游 defense preview TypeError 500）、
+        QWB-INT-009（完整调查闭环需上游注入威胁合同/模型运行时，blocked 为诚实语义）；
+        图谱/实验列表/防御执行维持 QWB-INT-001/002/006 阻塞，不伪造数据
+      - Live/Recorded/Synthetic/Unavailable 严格分离：强制 `live` 上游不可达时降级
+        `unavailable`，绝不假装 LIVE
 - [x] **MVP 验收清单**：前后端独立运行、统一界面导航、连接状态真实展示、调查闭环、
       图谱与证据带来源、防御候选不伪造执行、报告导出、离线 Demo 完整、凭证不泄漏、
       测试与构建通过、部署文档完整、不直接调用底层三仓库、不修改 AgentGuard 内核
@@ -136,6 +167,8 @@ cd backend; .\.venv\Scripts\python -m pytest -q; .\.venv\Scripts\ruff check .
 cd frontend; npm run typecheck; npm run lint; npm run test; npm run build
 # 真实 AgentGuard 合同检查（无真实服务时自动 SKIP，绝不假通过）
 python scripts\check_agentguard_contract.py
+# 真实联调全链路检查（B10；无真实服务时 SKIP）
+backend\.venv\Scripts\python scripts\live_agentguard_check.py
 # E2E（需前后端均已启动）
 cd frontend; npx playwright test
 ```
@@ -143,26 +176,55 @@ cd frontend; npx playwright test
 ### 5) Docker
 
 ```powershell
-docker compose up --build          # frontend :5173, backend :8001
+docker compose up --build          # frontend :5173, backend :8001（默认仅绑定 127.0.0.1）
 docker compose --profile postgres up --build   # 追加 PostgreSQL
+# 生产部署（要求显式密钥/口令/CORS；端口不直接发布，前置 TLS 反代）：
+# docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 默认开发部署绑定本机，不自动暴露公网；PostgreSQL 服务带健康检查、数据持久化卷；
 `frontend/Dockerfile` + `nginx.conf` 提供反向代理与 gzip/缓存头。
 
-### 6) 认证与数据库（B8）
+### 6) 认证与数据库（B8/B9）
 
 ```powershell
-# 启用四角色认证（生产必须）
-# 设置 AUTH_ENABLED=true、APP_SECRET_KEY（强随机）、SESSION_COOKIE_SECURE=true（HTTPS）
-# 演示用户：viewer/analyst/operator/admin，密码为 <用户名>-demo
+# 启用四角色认证（生产必须）——B9 fail closed：
+# AUTH_ENABLED=true 且未配置 APP_SECRET_KEY 时后端拒绝启动（无后备密钥）
+# APP_ENV=production 额外强制：密钥>=32字符、SESSION_COOKIE_SECURE=true、DATABASE_URL
+# 演示用户（仅 APP_ENV=development/demo 生效）：viewer/analyst/operator/admin，密码 <用户名>-demo
+# 正式用户（production）：
+#   1. 配置 DATABASE_URL 并启动后端（自动执行 Alembic 迁移）
+#   2. backend\.venv\Scripts\python ..\scripts\manage_users.py create alice --role analyst
+#   （PBKDF2-SHA256 哈希入库；deactivate 可即时吊销已有会话）
 
 # 初始化应用层数据库（PostgreSQL 或 SQLite）
 cd backend
-alembic upgrade head        # 创建 8 张 BFF 业务表（含 app_audit_events）
+alembic upgrade head        # 0001 业务表 + 0002 用户密码哈希字段
 ```
 
-### 7) 创建远程仓库（可选，需 GitHub CLI 已登录）
+### 7) 真实 AgentGuard 联调（B10）
+
+```powershell
+# 终端 1：WARDEN 内核（0.2.0，只读运行）
+cd ..\WARDEN
+python -m uvicorn warden.interface.api.app:create_app --factory --host 127.0.0.1 --port 8003
+# 终端 2：AgentGuard 1.0.0rc1（固定 feature/agentguard-upper-layer-v1 @ 7d42809）
+cd ..\AgentGuard
+set AGENTGUARD_WARDEN_URL=http://127.0.0.1:8003
+.venv\Scripts\python -m uvicorn agentguard.api.app:app --host 127.0.0.1 --port 8000
+# 终端 3：BFF + 实测
+cd ..\AgentGuard-QWB-App\backend
+set AGENTGUARD_BASE_URL=http://127.0.0.1:8000
+.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+# 真实联调检查（13 PASS / 1 BLOCKED-UPSTREAM / 0 FAIL）
+..\backend\.venv\Scripts\python scripts\..\scripts\live_agentguard_check.py
+```
+
+实测发现的上游阻塞（QWB-INT-008/009）见 `docs/api/INTEGRATION_BLOCKERS.md`；
+应用层不绕过、不伪造。离线无真实服务时 `check_agentguard_contract.py` 与
+`live_agentguard_check.py` 均 SKIP，绝不假通过。
+
+### 8) 创建远程仓库（可选，需 GitHub CLI 已登录）
 
 ```powershell
 gh auth login

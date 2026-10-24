@@ -26,12 +26,18 @@ def effective_data_mode(configured: str | None, agentguard_available: bool) -> D
 
     An explicit configured override (recorded/synthetic) wins for demo purposes,
     but an override is only honoured when it is a recognised mode; an unknown
-    override falls back to connectivity-derived mode. LIVE requires a reachable
-    AgentGuard; nothing else may claim LIVE.
+    override falls back to connectivity-derived mode. LIVE is never claimed
+    without a reachable AgentGuard: a forced `live` override downgrades to
+    UNAVAILABLE when the upstream is down, and `unavailable` may be forced to
+    keep a degraded deployment honest (B10 strict mode separation).
     """
     if configured:
         try:
-            return DataMode(configured.strip().lower())
+            requested = DataMode(configured.strip().lower())
         except ValueError:
-            pass
+            requested = None
+        if requested is not None:
+            if requested is DataMode.LIVE and not agentguard_available:
+                return DataMode.UNAVAILABLE
+            return requested
     return DataMode.LIVE if agentguard_available else DataMode.UNAVAILABLE

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import logging
+from xml.sax.saxutils import escape as xml_escape
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -24,6 +25,17 @@ from app.services.demo_service import DemoService
 logger = logging.getLogger(__name__)
 
 MAX_PDF_BYTES = 4 * 1024 * 1024
+
+
+def _esc(value: object) -> str:
+    """Escape a field for reportlab's mini-HTML parser.
+
+    Paragraph interprets XML-ish markup, so any upstream/user-controlled value
+    (run_id, finding summaries, metadata strings) must be entity-escaped before
+    interpolation - otherwise crafted content breaks rendering or injects
+    markup into the exported PDF (B9 input safety).
+    """
+    return xml_escape(str(value))
 
 
 class ReportsServiceError(RuntimeError):
@@ -100,7 +112,7 @@ def render_report_pdf(report: dict, meta: dict) -> bytes:
         bottomMargin=18 * mm,
         leftMargin=18 * mm,
         rightMargin=18 * mm,
-        title=f"调查报告 {report.get('run_id', 'unknown')}",
+        title=f"调查报告 {_esc(report.get('run_id', 'unknown'))}",
     )
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle("TitleCN", parent=styles["Title"], fontSize=16, leading=20)
@@ -109,17 +121,17 @@ def render_report_pdf(report: dict, meta: dict) -> bytes:
     mono = ParagraphStyle("MonoCN", parent=body, fontName="Courier", fontSize=8)
 
     story: list = [Paragraph("AgentGuard-QWB-App 调查报告", title_style), Spacer(1, 4)]
-    story.append(Paragraph(f"run_id: {report.get('run_id', '—')}", mono))
-    story.append(Paragraph(f"request_id: {report.get('request_id', '—')}", mono))
-    story.append(Paragraph(f"experiment_id: {report.get('experiment_id', '—')}", mono))
-    story.append(Paragraph(f"scenario_id: {report.get('scenario_id', '—')}", mono))
+    story.append(Paragraph(f"run_id: {_esc(report.get('run_id', '—'))}", mono))
+    story.append(Paragraph(f"request_id: {_esc(report.get('request_id', '—'))}", mono))
+    story.append(Paragraph(f"experiment_id: {_esc(report.get('experiment_id', '—'))}", mono))
+    story.append(Paragraph(f"scenario_id: {_esc(report.get('scenario_id', '—'))}", mono))
     story.append(
         Paragraph(
-            f"status: {report.get('status', '—')} · policy_profile: {report.get('policy_profile', '—')}",
+            f"status: {_esc(report.get('status', '—'))} · policy_profile: {_esc(report.get('policy_profile', '—'))}",
             body,
         )
     )
-    story.append(Paragraph(f"created_at: {report.get('created_at', '—')}", body))
+    story.append(Paragraph(f"created_at: {_esc(report.get('created_at', '—'))}", body))
     story.append(Spacer(1, 6))
 
     story.append(Paragraph("风险发现", h2))
@@ -127,11 +139,14 @@ def render_report_pdf(report: dict, meta: dict) -> bytes:
     if not findings:
         story.append(Paragraph("（无）", body))
     for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        evidence_ids = ", ".join(str(item) for item in finding.get("evidence_ids", []))
         story.append(
             Paragraph(
-                f"• {finding.get('finding_id', '?')} [{finding.get('severity', '?')}] "
-                f"{finding.get('risk_type', '?')} — {finding.get('summary', '')} "
-                f"(evidence: {', '.join(finding.get('evidence_ids', []))})",
+                f"• {_esc(finding.get('finding_id', '?'))} [{_esc(finding.get('severity', '?'))}] "
+                f"{_esc(finding.get('risk_type', '?'))} — {_esc(finding.get('summary', ''))} "
+                f"(evidence: {_esc(evidence_ids)})",
                 body,
             )
         )
@@ -142,10 +157,12 @@ def render_report_pdf(report: dict, meta: dict) -> bytes:
     if not evidence:
         story.append(Paragraph("（无）", body))
     for item in evidence:
+        if not isinstance(item, dict):
+            continue
         story.append(
             Paragraph(
-                f"• {item.get('evidence_id', '?')} — level={item.get('evidence_level', '?')} "
-                f"verification={item.get('verification_status', '?')}",
+                f"• {_esc(item.get('evidence_id', '?'))} — level={_esc(item.get('evidence_level', '?'))} "
+                f"verification={_esc(item.get('verification_status', '?'))}",
                 body,
             )
         )
@@ -156,10 +173,12 @@ def render_report_pdf(report: dict, meta: dict) -> bytes:
     if not candidates:
         story.append(Paragraph("（无）", body))
     for item in candidates:
+        if not isinstance(item, dict):
+            continue
         story.append(
             Paragraph(
-                f"• {item.get('candidate_id', '?')} — status={item.get('status', '?')} "
-                f"execution_supported={item.get('execution_supported', False)}",
+                f"• {_esc(item.get('candidate_id', '?'))} — status={_esc(item.get('status', '?'))} "
+                f"execution_supported={_esc(item.get('execution_supported', False))}",
                 body,
             )
         )
@@ -170,13 +189,13 @@ def render_report_pdf(report: dict, meta: dict) -> bytes:
     if not limitations:
         story.append(Paragraph("（无）", body))
     for limitation in limitations:
-        story.append(Paragraph(f"• {limitation}", body))
+        story.append(Paragraph(f"• {_esc(limitation)}", body))
     story.append(Spacer(1, 6))
 
     source_note = report.get("source_note") or meta.get("source")
     if source_note:
         story.append(Paragraph("结果来源", h2))
-        story.append(Paragraph(str(source_note), body))
+        story.append(Paragraph(_esc(source_note), body))
     story.append(Spacer(1, 8))
     story.append(
         Paragraph(

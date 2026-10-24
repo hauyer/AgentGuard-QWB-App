@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import CsrfProtectedUser
 from app.core.security import issue_session, new_csrf_token
-from app.services.auth_service import AppUser, verify_credentials
+from app.services.auth_service import AppUser, find_user, verify_credentials
 
 router = APIRouter()
 
@@ -41,8 +41,9 @@ def login(request: Request, body: LoginRequest) -> Response:
     settings = request.app.state.settings
     if not settings.auth_enabled:
         return _json_response(_me_payload(settings, None))
-    user = verify_credentials(body.username, body.password)
+    user = verify_credentials(settings, body.username, body.password)
     if user is None:
+        # Never reveal whether the username exists.
         raise HTTPException(status_code=401, detail={"error": "INVALID_CREDENTIALS", "message": "用户名或密码错误"})
     response = _json_response(_me_payload(settings, user))
     csrf = new_csrf_token(settings)
@@ -58,6 +59,7 @@ def login(request: Request, body: LoginRequest) -> Response:
     response.set_cookie(
         settings.csrf_cookie_name,
         csrf,
+        max_age=settings.session_max_age_seconds,
         httponly=False,
         samesite="lax",
         secure=settings.session_cookie_secure,
@@ -87,7 +89,5 @@ def me(request: Request) -> dict:
     session = request.cookies.get(settings.session_cookie_name)
     username = verify_session(settings, session)
     if username:
-        from app.services.auth_service import DEMO_USERS
-
-        return _me_payload(settings, DEMO_USERS.get(username))
+        return _me_payload(settings, find_user(settings, username))
     return _me_payload(settings, None)

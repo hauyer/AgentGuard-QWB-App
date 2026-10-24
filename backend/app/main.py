@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.core.db import dispose_engine, upgrade_database
 from app.integrations.agentguard_client import AgentGuardClient, AgentGuardError
 from app.services.audit_service import AuditService
 from app.services.demo_service import DemoService
@@ -39,13 +40,23 @@ async def lifespan(app: FastAPI):
     app.state.agentguard_client = AgentGuardClient(settings)
     fixtures_dir = _resolve_fixtures_dir(settings.demo_fixtures_dir)
     app.state.demo_service = DemoService(fixtures_dir)
-    app.state.audit_service = AuditService()
-    logger.info("BFF started; upstream AgentGuard fixed at %s", settings.agentguard_base_url)
+    if settings.database_url:
+        # Alembic owns the schema; run pending migrations so audit events and
+        # database users are actually persisted (B9). Fail fast on error.
+        upgrade_database(settings)
+    app.state.audit_service = AuditService(settings)
+    logger.info(
+        "BFF started; upstream AgentGuard fixed at %s (env=%s auth=%s)",
+        settings.agentguard_base_url, settings.app_env, settings.auth_enabled,
+    )
     logger.info("Demo fixtures loaded from %s", fixtures_dir)
+    if not settings.database_url:
+        logger.warning("DATABASE_URL not set: audit events are memory-buffered only (development mode)")
     try:
         yield
     finally:
         app.state.agentguard_client.close()
+        dispose_engine(settings)
 
 
 def create_app() -> FastAPI:
@@ -66,6 +77,15 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        # The BFF serves JSON only; these headers harden any browser rendering.
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
 
     @app.get("/api/health")
     def api_health() -> dict[str, str]:

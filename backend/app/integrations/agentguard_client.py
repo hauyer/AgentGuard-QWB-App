@@ -1,14 +1,20 @@
 """Unified AgentGuard API client (BFF connector).
 
-Contract baseline: AgentGuard commit 00d12bee352060ea6014eebea8400edd7c74a029
-(feature/agentguard-upper-layer-v1), documented in docs/api/AGENTGUARD_API_MATRIX.md.
+Contract baseline (B10): AgentGuard commit 7d42809172059b1f38200bd8308c73345efd77dc
+(feature/agentguard-upper-layer-v1, "Record A8 cross-version acceptance"),
+documented in docs/api/AGENTGUARD_API_MATRIX.md and the OpenAPI diff report
+docs/api/AGENTGUARD_OPENAPI_DIFF_B10.md. Business paths are unchanged from the
+A7 baseline; A8 adds hidden-truth metadata rejection upstream (mirrored by the
+BFF schema), sanitized 422 bodies, and explicit request_id idempotency with
+read-only reconciliation for ambiguous submissions.
 
 Safety rules enforced here (mirror the upstream SDK contract):
   * upstream origin is fixed by server config; callers cannot choose arbitrary hosts
   * X-Request-ID is always sent; a caller-supplied value is preserved
   * timeout is bounded (0, 120] seconds
   * responses larger than 4 MiB are rejected
-  * POST/PUT/PATCH/DELETE are never auto-retried
+  * POST/PUT/PATCH/DELETE are never auto-retried (reconciliation for ambiguous
+    POSTs is read-only and decided by the service layer, never a blind resubmit)
   * only idempotent GET requests may be retried, with a bounded backoff
   * redirects are never followed
   * request bodies and tokens are never written to logs
@@ -65,10 +71,16 @@ class AgentGuardClient:
         self._settings = settings or get_settings()
         self._base_url = self._settings.agentguard_base_url
         self._timeout = self._settings.agentguard_api_timeout
+        # trust_env=False (B9): ignore ambient HTTP(S)_PROXY / system proxy
+        # settings. The upstream origin is fixed server-side and normally
+        # direct; routing it through an uncontrolled proxy would expose the
+        # X-AgentGuard-Token header to that proxy and makes connectivity depend
+        # on the operator's machine configuration.
         self._http = httpx.Client(
             base_url=self._base_url,
             timeout=httpx.Timeout(self._timeout),
             follow_redirects=False,
+            trust_env=False,
             transport=transport,
         )
 

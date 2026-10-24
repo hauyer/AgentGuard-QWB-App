@@ -72,6 +72,7 @@ def investigations_create(
             request.app.state.demo_service,
             mode_override=_mode_override(request),
             request=body,
+            settings=request.app.state.settings,
         )
     except InvestigationServiceError as exc:
         return _error_response(exc)

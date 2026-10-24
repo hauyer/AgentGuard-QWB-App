@@ -1,7 +1,10 @@
 # AgentGuard API Matrix
 
-Pinned baseline: AgentGuard `00d12bee352060ea6014eebea8400edd7c74a029`
-(`feature/agentguard-upper-layer-v1`, "Document A7 public API and MCP acceptance").
+Pinned baseline (B10): AgentGuard `7d42809172059b1f38200bd8308c73345efd77dc`
+(`feature/agentguard-upper-layer-v1`, "Record A8 cross-version acceptance", 1.0.0rc1).
+Previous baseline (B0–B8): `00d12bee352060ea6014eebea8400edd7c74a029`.
+Business paths are unchanged between both baselines; behavior differences are
+documented in `AGENTGUARD_OPENAPI_DIFF_B10.md`.
 Machine-readable record: `contracts/agentguard-version.json`.
 
 Legend — BFF 支持: `client`=BFF 连接器已实现方法；`used`=当前阶段被应用服务使用；

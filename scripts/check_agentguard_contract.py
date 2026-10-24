@@ -63,7 +63,13 @@ def main() -> int:
         return SKIP_STATUS
 
     expected = set(contract["supported_endpoints"])
-    actual = set(openapi.get("paths", {}))
+    # OpenAPI lists operations per path; rebuild "METHOD /path" pairs so the
+    # comparison matches the pinned endpoint format.
+    actual = {
+        f"{method.upper()} {path}"
+        for path, operations in openapi.get("paths", {}).items()
+        for method in operations
+    }
     missing = expected - actual
     if missing:
         print(f"FAIL: {len(missing)} pinned endpoints missing from live OpenAPI:")

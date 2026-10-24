@@ -8,6 +8,10 @@ WORKDIR /srv/backend
 
 COPY backend/pyproject.toml README.md /srv/backend/
 COPY backend/app /srv/backend/app
+# Alembic schema + app package: the BFF runs pending migrations at startup when
+# DATABASE_URL is set (audit persistence and database users, B9).
+COPY backend/alembic.ini /srv/backend/alembic.ini
+COPY backend/migrations /srv/backend/migrations
 
 RUN pip install --no-cache-dir .
 

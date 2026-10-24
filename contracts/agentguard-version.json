@@ -3,21 +3,26 @@
   "pinned_agentguard": {
     "repository": "https://github.com/hauyer/AgentGuard",
     "branch": "feature/agentguard-upper-layer-v1",
-    "commit": "00d12bee352060ea6014eebea8400edd7c74a029",
-    "commit_short": "00d12be",
-    "commit_subject": "Document A7 public API and MCP acceptance",
-    "pinned_at": "2026-10-23",
+    "commit": "7d42809172059b1f38200bd8308c73345efd77dc",
+    "commit_short": "7d42809",
+    "commit_subject": "Record A8 cross-version acceptance",
+    "pinned_at": "2026-10-24",
+    "previous_pin": "00d12bee352060ea6014eebea8400edd7c74a029 (A7 baseline, B0-B8)",
+    "upstream_version": "1.0.0rc1",
     "local_clone": "D:/study homework/stego/AgentGuard (read-only)"
   },
   "api_documentation": {
     "public_api_doc": "docs/PUBLIC_API.md",
-    "sdk": "src/agentguard/sdk.py",
-    "request_contract": "src/agentguard/contracts/warden.py (WardenAuditRequest)",
+    "release_api_reference": "docs/release/API_REFERENCE.md",
+    "router_module": "src/agentguard/api/public_routes.py (A8: routes extracted from app factory)",
+    "request_contract": "src/agentguard/contracts/warden.py (WardenAuditRequest + WardenDefenseExecuteRequest)",
+    "truth_guard": "src/agentguard/contracts/truth_guard.py (A8 hidden-truth metadata rejection)",
     "evidence_contract": "src/agentguard/contracts/evidence.py (GovernedEvidence)",
     "defense_contract": "src/agentguard/contracts/defense.py (DefensePreview)",
     "capabilities_contract": "src/agentguard/contracts/capabilities.py (CapabilityManifest)",
     "experiences_contract": "src/agentguard/contracts/experience.py (ExperienceSearchResult)",
-    "openapi": "exposed at runtime via /openapi.json; not committed in upstream"
+    "openapi_snapshot": "integration-data/agentguard-openapi-7d42809.json (live capture, 68 paths)",
+    "openapi_diff_report": "docs/api/AGENTGUARD_OPENAPI_DIFF_B10.md"
   },
   "supported_endpoints": [
     "GET /v1/system/health",
@@ -41,9 +46,12 @@
   },
   "known_semantics": {
     "warden_missing": "503 detail.error=WARDEN_NOT_CONFIGURED on investigation submission",
-    "request_id": "X-Request-ID on every response; caller value preserved if valid",
+    "request_id": "X-Request-ID on every response; caller value preserved if valid; local workflow registration is idempotent per request_id",
+    "ambiguity": "A8: submission state uncertainty is reported as ambiguous and requires reconciliation; never auto-resubmitted",
+    "metadata_guard": "A8: metadata containing hidden evaluator fields (oracle/ground_truth/label ...) is rejected 422 by the upstream contract",
+    "validation_errors": "A8: 422 bodies contain only error type, field location and a generic message",
     "pagination": "items/count/offset/limit/next_offset",
     "evidence_levels": ["synthetic", "observational", "interventional", "causal_validated"],
-    "defense_execute": "unsupported until an approved external executor is verified"
+    "defense_execute": "POST /v1/defense-policies/{id}/execute remains a compatibility entry; executor missing => honest unsupported response"
   }
 }

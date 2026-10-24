@@ -13,7 +13,11 @@ import uuid
 from datetime import UTC, datetime
 
 from app.core.data_mode import DataMode, effective_data_mode
-from app.integrations.agentguard_client import AgentGuardClient, AgentGuardError
+from app.integrations.agentguard_client import (
+    AgentGuardClient,
+    AgentGuardError,
+    AgentGuardUnavailable,
+)
 from app.schemas.investigations import CreateInvestigationRequest
 from app.services.demo_service import DemoService
 
@@ -73,12 +77,55 @@ def create_investigation(
     *,
     mode_override: str | None,
     request: CreateInvestigationRequest,
+    settings=None,
 ) -> tuple[dict, dict]:
     mode = effective_data_mode(mode_override, _agentguard_reachable(client))
     request_id = f"inv-{uuid.uuid4().hex[:16]}"
     if mode == DataMode.LIVE:
+        # The audit timeout must fit inside the HTTP budget, otherwise the BFF
+        # would disconnect while the upstream run is still executing.
+        if (
+            settings is not None
+            and request.wait_for_completion
+            and settings.agentguard_api_timeout < request.timeout_seconds + 2
+        ):
+            raise InvestigationServiceError(
+                422,
+                "TIMEOUT_BUDGET_INVALID",
+                "wait_for_completion=true 要求 AGENTGUARD_API_TIMEOUT 大于 timeout_seconds + 2 秒"
+                f"（当前 HTTP 预算 {settings.agentguard_api_timeout}s，审计超时 {request.timeout_seconds}s）；"
+                "请提高服务端超时或改用异步轮询。",
+            )
         try:
             payload = client.create_investigation(request.to_warden_payload(request_id))
+        except AgentGuardUnavailable as exc:
+            # POST is never retried. AgentGuard records workflows synchronously
+            # under our request_id before any remote submit, so a read-only
+            # reconciliation GET decides whether the investigation actually
+            # exists. We never auto-resubmit (A8 ambiguity contract).
+            outcome, detail = _reconcile_after_timeout(client, request_id)
+            if outcome == "found":
+                detail = dict(detail)
+                detail.setdefault("request_id", request_id)
+                detail["recovered_after_timeout"] = True
+                logger.warning("investigation %s reconciled after upstream timeout (found)", request_id)
+                return detail, {"data_mode": "live", "recovered_after_timeout": True}
+            if outcome == "absent":
+                # Confirmed absent upstream: the original submission never
+                # landed, so the client may safely retry with a new request.
+                raise InvestigationServiceError(
+                    exc.status_code or 503,
+                    "SUBMISSION_NOT_RECORDED",
+                    "AgentGuard 提交超时，且对账确认该调查未创建（request_id 未登记）；可安全重试。",
+                    request_id,
+                ) from exc
+            raise InvestigationServiceError(
+                503,
+                "SUBMISSION_AMBIGUOUS",
+                "AgentGuard 提交超时且对账不可用；状态不明确，请稍后按 request_id 查询对账，"
+                "系统不会自动重新提交。",
+                request_id,
+            ) from exc
         except AgentGuardError as exc:
             raise _to_service_error(exc) from exc
         payload = dict(payload)
@@ -165,6 +212,24 @@ def _agentguard_reachable(client: AgentGuardClient) -> bool:
         return True
     except AgentGuardError:
         return False
+
+
+def _reconcile_after_timeout(client: AgentGuardClient, request_id: str) -> tuple[str, dict | None]:
+    """Read-only reconciliation after an ambiguous POST timeout (B10).
+
+    Returns ("found", payload) when the investigation exists upstream,
+    ("absent", None) when the upstream conclusively reports 404 (the
+    submission never landed), or ("unknown", None) when reconciliation
+    itself failed - in which case the caller must keep the outcome ambiguous
+    instead of guessing. Never resubmits.
+    """
+    try:
+        payload = client.get_investigation(request_id)
+    except AgentGuardError as exc:
+        if exc.status_code == 404:
+            return "absent", None
+        return "unknown", None
+    return "found", payload
 
 
 def _derive_timeline(detail: dict) -> list[dict]:

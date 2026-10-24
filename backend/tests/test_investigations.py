@@ -173,7 +173,13 @@ def test_scenarios_demo() -> None:
 # auth / session / role enforcement
 # ------------------------------------------------------------------ #
 def _client_with_auth() -> TestClient:
-    return _client("http://127.0.0.1:1", app_data_mode="synthetic", auth_enabled=True)
+    # B9 fail-closed: auth_enabled requires an explicit APP_SECRET_KEY.
+    return _client(
+        "http://127.0.0.1:1",
+        app_data_mode="synthetic",
+        auth_enabled=True,
+        app_secret_key="unit-test-secret-key-0123456789abcdef",
+    )
 
 
 def _csrf_header(client: TestClient) -> dict:

@@ -1,10 +1,16 @@
-"""Investigation schemas (B3). The create contract mirrors the real AgentGuard
-WardenAuditRequest (commit 00d12bee) so the BFF validates before forwarding.
+"""Investigation schemas (B3, realigned in B10).
+
+The create contract mirrors the AgentGuard WardenAuditRequest at commit
+7d42809172059b1f38200bd8308c73345efd77dc (feature/agentguard-upper-layer-v1):
+capture target constraints (non-empty unique agent_ids, integer layer, token
+policy enum) and the A8 hidden-truth metadata guard are validated at the BFF
+before forwarding, so requests are rejected with application-level errors
+instead of opaque upstream 422s. See docs/api/AGENTGUARD_OPENAPI_DIFF_B10.md.
 """
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -12,15 +18,56 @@ AuditMode = Literal["observation", "capture_only", "detection", "causal_audit", 
 
 VALID_MODES = {"observation", "capture_only", "detection", "causal_audit", "defense_evaluation"}
 
+# Same deny-list semantics as AgentGuard contracts/truth_guard.py (A8): known
+# evaluator-only field names are rejected recursively, case-insensitively.
+_DENIED_TRUTH_FIELDS = frozenset({
+    "truth", "label", "labels", "oracle", "is_positive", "target_label",
+    "is_true_stego", "oracle_label", "ground_truth_path", "trial_truth",
+    "ground_truth", "ground_truth_label", "oracle_secret", "hidden_label",
+    "truth_label", "answer_key",
+})
+_NORMALIZED_DENIED_FIELDS = frozenset(
+    "".join(character for character in field_name if character.isalnum())
+    for field_name in _DENIED_TRUTH_FIELDS
+)
+
+
+def find_hidden_truth_fields(value: Any) -> set[str]:
+    """Return denied key names found recursively without returning their values."""
+    found: set[str] = set()
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if isinstance(key, str):
+                normalized = "".join(character for character in key.casefold() if character.isalnum())
+                if normalized in _NORMALIZED_DENIED_FIELDS:
+                    found.add(key)
+            found.update(find_hidden_truth_fields(nested))
+    elif isinstance(value, (list, tuple)):
+        for nested in value:
+            found.update(find_hidden_truth_fields(nested))
+    return found
+
 
 class CaptureTarget(BaseModel):
+    """Mirrors AgentGuard WardenCaptureTarget (commit 7d42809)."""
+
     target_id: str = Field(min_length=1, max_length=256)
-    agent_ids: list[str] = Field(default_factory=list, max_length=64)
-    module: str | None = Field(default=None, max_length=256)
-    layer: str | None = Field(default=None, max_length=64)
-    component: str | None = Field(default=None, max_length=128)
-    token_policy: str | None = Field(default=None, max_length=128)
+    agent_ids: list[str] = Field(min_length=1, max_length=64)
+    module: str | None = Field(default=None, max_length=512)
+    layer: int | None = Field(default=None, ge=0)
+    component: str | None = Field(default=None, max_length=256)
+    token_policy: Literal["all", "last_token", "mean_tokens"] = "last_token"  # noqa: S105 - capture policy name, not a secret
     retain_gradient: bool = False
+
+    @field_validator("agent_ids")
+    @classmethod
+    def _nonblank_unique_agent_ids(cls, values: list[str]) -> list[str]:
+        cleaned = [value.strip() for value in values]
+        if any(not value for value in cleaned):
+            raise ValueError("agent_ids must not contain blank values")
+        if len(set(cleaned)) != len(cleaned):
+            raise ValueError("agent_ids must be unique")
+        return cleaned
 
 
 class CreateInvestigationRequest(BaseModel):
@@ -33,11 +80,11 @@ class CreateInvestigationRequest(BaseModel):
     mode: AuditMode = "causal_audit"
     probe_id: str | None = Field(default=None, max_length=256)
     sae_id: str | None = Field(default=None, max_length=256)
-    capture_targets: list[CaptureTarget] = Field(default_factory=list, max_length=64)
-    metadata: dict = Field(default_factory=dict)
+    capture_targets: list[CaptureTarget] = Field(default_factory=list, max_length=128)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     authorization_ref: str | None = Field(default=None, max_length=256)
-    scenario_id: str | None = Field(default=None, max_length=256)
-    risk_type: str | None = Field(default=None, max_length=128)
+    scenario_id: str | None = Field(default=None, min_length=1, max_length=256)
+    risk_type: str | None = Field(default=None, min_length=1, max_length=256)
     start_run: bool = True
     wait_for_completion: bool = False
     timeout_seconds: float = Field(default=30.0, ge=1.0, le=120.0)
@@ -48,6 +95,14 @@ class CreateInvestigationRequest(BaseModel):
     def _mode_in_contract(cls, value: str) -> str:
         if value not in VALID_MODES:
             raise ValueError(f"mode must be one of {sorted(VALID_MODES)}")
+        return value
+
+    @field_validator("metadata")
+    @classmethod
+    def _reject_hidden_truth_metadata(cls, value: dict[str, Any]) -> dict[str, Any]:
+        present = find_hidden_truth_fields(value)
+        if present:
+            raise ValueError(f"metadata must not contain hidden evaluator fields: {sorted(present)}")
         return value
 
     def to_warden_payload(self, request_id: str) -> dict:

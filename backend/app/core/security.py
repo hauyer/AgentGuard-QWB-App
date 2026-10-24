@@ -4,6 +4,10 @@ Sessions are stateless (signed cookie): the browser only ever holds the signed
 value, never the secret and never AgentGuard/WARDEN credentials. CSRF uses the
 double-submit pattern: a signed qwb_csrf cookie is issued with the session and
 every mutating request must echo it in the X-CSRF-Token header.
+
+B9: there is no fallback secret. Settings validation refuses to start with
+AUTH_ENABLED=true unless APP_SECRET_KEY is configured, so every signing path
+here can require the key and raise instead of silently degrading.
 """
 
 from __future__ import annotations
@@ -18,11 +22,16 @@ import time
 from app.core.config import Settings
 
 
+class SecretKeyNotConfigured(RuntimeError):
+    """APP_SECRET_KEY is missing while a cryptographic operation needs it."""
+
+
 def _secret(settings: Settings) -> bytes:
-    if settings.app_secret_key:
-        return settings.app_secret_key.encode("utf-8")
-    # Development-only ephemeral secret: sessions do not survive restarts.
-    return hashlib.sha256(b"dev-ephemeral-agentguard-qwb-secret").digest()
+    if not settings.app_secret_key:
+        raise SecretKeyNotConfigured(
+            "APP_SECRET_KEY is not configured; refusing to sign sessions/CSRF tokens with a fallback secret"
+        )
+    return settings.app_secret_key.encode("utf-8")
 
 
 def _sign(settings: Settings, payload: str) -> str:
