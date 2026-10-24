@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { useAuthStore } from "../stores/auth-store";
 import { useEvidence } from "../hooks/use-evidence";
@@ -17,7 +18,9 @@ const SAMPLE_REQUEST_IDS = ["inv-qwb-0001", "inv-qwb-0005"];
 
 export function EvidencePage() {
   const role = useAuthStore((state) => state.role);
-  const [requestId, setRequestId] = useState(SAMPLE_REQUEST_IDS[0]);
+  const [searchParams] = useSearchParams();
+  const initialRequestId = searchParams.get("request_id") ?? SAMPLE_REQUEST_IDS[0];
+  const [requestId, setRequestId] = useState(initialRequestId);
   const { data, isLoading, error, refetch, isFetching } = useEvidence(requestId);
 
   const evidence = data?.evidence;

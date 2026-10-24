@@ -4,6 +4,7 @@ import {
   FlaskConical,
   LayoutDashboard,
   Network,
+  PlayCircle,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -19,6 +20,7 @@ import { StatusDot } from "../ui/status-dot";
 
 const NAV_ITEMS = [
   { to: "/", label: "系统总览", icon: LayoutDashboard, end: true },
+  { to: "/demo", label: "演示导览", icon: PlayCircle },
   { to: "/investigations", label: "安全调查", icon: Target },
   { to: "/interaction-graph", label: "交互图谱", icon: Network },
   { to: "/evidence", label: "证据分析", icon: ScrollText },
@@ -94,8 +96,7 @@ export function AppLayout() {
               <StatusDot tone={agentguardReachable === undefined ? "neutral" : agentguardReachable ? "ok" : "danger"} />
               AgentGuard {agentguardReachable ? "已连接" : agentguardReachable === undefined ? "检测中" : "不可用"}
             </span>
-            <span className="text-slate-500">Viewer</span>
-          </div>
+            <span className="text-slate-500">Viewer</span>          </div>
         </header>
         <main className="min-w-0 flex-1 overflow-y-auto p-6">
           <Outlet />

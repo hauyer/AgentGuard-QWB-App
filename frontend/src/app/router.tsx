@@ -3,6 +3,7 @@ import { createBrowserRouter } from "react-router-dom";
 import { AppLayout } from "../components/layout/AppLayout";
 import { CreateInvestigationPage } from "../pages/CreateInvestigationPage";
 import { DefensePage } from "../pages/DefensePage";
+import { DemoCenterPage } from "../pages/DemoCenterPage";
 import { EvidencePage } from "../pages/EvidencePage";
 import { ExperiencesPage } from "../pages/ExperiencesPage";
 import { ExperimentsPage } from "../pages/ExperimentsPage";
@@ -19,6 +20,7 @@ export const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       { index: true, element: <SystemOverviewPage /> },
+      { path: "demo", element: <DemoCenterPage /> },
       { path: "investigations", element: <InvestigationsListPage /> },
       { path: "investigations/new", element: <CreateInvestigationPage /> },
       { path: "investigations/:requestId", element: <InvestigationDetailPage /> },

@@ -27,7 +27,7 @@ WARDEN     ── 底层因果审计内核（只读，不直接访问）
   负责系统状态、业务数据、服务端凭证、AgentGuard REST 调用、响应转换与审计。
   不重新实现 AgentGuard 的调查、证据门控、经验学习和策略算法。
 
-## 当前进度（B0–B6）
+## 当前进度（B0–B7）
 
 - [x] **B0** 独立 Git 仓库初始化，前后端基础工程可运行；AgentGuard 接口基线固定：
   `feature/agentguard-upper-layer-v1` @
@@ -63,10 +63,14 @@ WARDEN     ── 底层因果审计内核（只读，不直接访问）
       `GET /api/reports/{run_id}` + `GET /api/reports/{run_id}/export`（应用层 reportlab
       生成 PDF：仅排版报告字段，不改指标、不推断新因果结论；pypdf 文本级验证）、
       `GET /api/experiences`（已验证经验展示与查询，第一版不做 Thompson Sampling）
-- [x] 后端 pytest（94 passed）、ruff 0、前端 vitest（46 passed）/ typecheck / lint /
+- [x] **B7** 独立 Demo 模式完善：`GET /api/demo/overview` + 前端 `/demo` 演示导览页
+      （9 步完整可复现流程：打开平台→选场景→Agent 交互→调查过程→风险发现→
+      证据与限制→防御候选→实验比较→生成报告，每步带 fixture_ref 与深链）；
+      证据/防御页支持 `?request_id=` 深链；Live/Unavailable 下流程仍可浏览、
+      场景数据按模式真实返回；demo/README.md 记录数据模式、夹具注册、流程与安全约束
+- [x] 后端 pytest（97 passed）、ruff 0、前端 vitest（49 passed）/ typecheck / lint /
       build 全绿、CI 工作流、Docker 构建
-- [ ] B7 离线 Demo 完善 →
-      B8 权限/部署/发布
+- [ ] B8 权限/部署/发布
 
 ## 快速开始
 
