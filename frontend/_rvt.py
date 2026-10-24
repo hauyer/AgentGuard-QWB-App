@@ -1,5 +1,0 @@
-t = open("vt2.log", encoding="utf-8", errors="replace").read()
-out = open("_vt.log", "w", encoding="utf-8")
-out.write(t[-2200:])
-out.close()
-print("ok")
