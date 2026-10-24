@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, "feature/b9-b10-security-integration", "feature/b11-b17-application-upgrade"]
   pull_request:
 
 jobs:
@@ -24,6 +24,19 @@ jobs:
         run: ruff check .
       - name: Pytest
         run: python -m pytest -q
+
+  migrations:
+    name: Database migration chain (SQLite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend
+        run: pip install -e "./backend[dev]"
+      - name: Verify 0001 -> 0002 upgrade/downgrade/re-upgrade
+        run: python scripts/verify_migrations.py
 
   frontend:
     name: Frontend typecheck + lint + tests + build
@@ -91,7 +104,23 @@ jobs:
         with:
           python-version: "3.11"
       - name: Run contract check
+        # Exit code 42 = live AgentGuard unreachable => SKIP (never a false pass).
         run: python scripts/check_agentguard_contract.py || test $? -eq 42
+
+  live-smoke:
+    name: Live AgentGuard smoke (optional, explicit)
+    runs-on: ubuntu-latest
+    # Real-service verification runs only when a live AgentGuard endpoint is
+    # provided via repository/environment variables. Without it the job is
+    # skipped and reported as such - never counted as a passing live test.
+    if: ${{ vars.AGENTGUARD_LIVE_BASE_URL != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run live integration check (strict verdicts)
+        run: python scripts/live_agentguard_check.py --base-url "${{ vars.AGENTGUARD_LIVE_BASE_URL }}"
 
   docker:
     name: Docker builds

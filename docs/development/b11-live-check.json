@@ -1,0 +1,87 @@
+{
+ "base_url": "http://127.0.0.1:8000",
+ "results": [
+  {
+   "name": "system_health",
+   "status": "PASS",
+   "detail": "HTTP 200 status=ok version=1.0.0rc1 X-Request-ID echo=True"
+  },
+  {
+   "name": "system_capabilities",
+   "status": "PASS",
+   "detail": "HTTP 200 provider=mock backend_mode=synthetic"
+  },
+  {
+   "name": "warden_kernel_status",
+   "status": "PASS",
+   "detail": "HTTP 200 warden=available authoritative_for=['probe', 'sae', 'causal_audit', 'low_level_evidence']"
+  },
+  {
+   "name": "scenarios",
+   "status": "PASS",
+   "detail": "HTTP 200 items=1"
+  },
+  {
+   "name": "create_investigation",
+   "status": "PASS",
+   "detail": "HTTP 200 workflow_id=inv-b11live-29e35fb05852 workflow_status=blocked preflight=blocked"
+  },
+  {
+   "name": "truth_guard_metadata_rejection",
+   "status": "PASS",
+   "detail": "HTTP 422 (A8 guard: evaluator metadata must be rejected)"
+  },
+  {
+   "name": "investigation_idempotency",
+   "status": "PASS",
+   "detail": "resubmit HTTP 200; stored_occurrences=1 (resubmit echoes workflow_id=False)"
+  },
+  {
+   "name": "investigation_detail",
+   "status": "PASS",
+   "detail": "HTTP 200 status=finished workflow_status=blocked"
+  },
+  {
+   "name": "evidence_read",
+   "status": "PASS",
+   "detail": "HTTP 200 keys=['items', 'limitations', 'request_id', 'run_status', 'workflow_status']"
+  },
+  {
+   "name": "interaction_graph",
+   "status": "PASS",
+   "detail": "HTTP 200 (published endpoint; shape validated)"
+  },
+  {
+   "name": "investigation_timeline",
+   "status": "UNSUPPORTED",
+   "detail": "GET /v1/investigations/{request_id}/timeline not published at pinned commit"
+  },
+  {
+   "name": "report_read",
+   "status": "BLOCKED_UPSTREAM",
+   "detail": "no run_id on stored workflow (preflight blocked before run submission); report body could not be read - not counted as PASS"
+  },
+  {
+   "name": "defense_policies",
+   "status": "BLOCKED_UPSTREAM",
+   "detail": "HTTP 500 INTERNAL_SERVER_ERROR - upstream TypeError (QWB-INT-008, AgentGuard 1.0.0rc1 + WARDEN 0.2.0)"
+  },
+  {
+   "name": "experiences_search",
+   "status": "PASS",
+   "detail": "HTTP 200 items=0"
+  },
+  {
+   "name": "system_audit_events_auth",
+   "status": "PASS",
+   "detail": "HTTP 403 without operator token (fail-closed expectation: 401/403)"
+  }
+ ],
+ "counts": {
+  "PASS": 12,
+  "FAIL": 0,
+  "SKIP_NOT_CONFIGURED": 0,
+  "BLOCKED_UPSTREAM": 2,
+  "UNSUPPORTED": 1
+ }
+}
