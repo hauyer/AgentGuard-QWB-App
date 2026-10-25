@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.api.deps import require_role
 from app.core.data_mode import DataMode, effective_data_mode
 from app.integrations.agentguard_client import AgentGuardClient, AgentGuardError
+from app.services import resource_access
 from app.services.demo_service import DemoService
 from app.services.findings_service import FindingsServiceError, get_findings, get_hypotheses
 
@@ -31,11 +32,15 @@ def _mode_override(request: Request) -> str | None:
 
 
 @router.get("/runs/{run_id}/findings")
-def run_findings(request: Request, run_id: str, _user: Viewer) -> dict:
+def run_findings(request: Request, run_id: str, user: Viewer) -> dict:
     try:
+        resource_access.require_run_access(
+            request.app.state.settings, _client(request), user, run_id, mode_override=_mode_override(request))
         payload, meta = get_findings(
             _client(request), _demo(request), mode_override=_mode_override(request), run_id=run_id
         )
+    except resource_access.AccessDenied as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
     except FindingsServiceError as exc:
         return JSONResponse(
             status_code=exc.status_code,
@@ -45,11 +50,15 @@ def run_findings(request: Request, run_id: str, _user: Viewer) -> dict:
 
 
 @router.get("/runs/{run_id}/hypotheses")
-def run_hypotheses(request: Request, run_id: str, _user: Viewer) -> dict:
+def run_hypotheses(request: Request, run_id: str, user: Viewer) -> dict:
     try:
+        resource_access.require_run_access(
+            request.app.state.settings, _client(request), user, run_id, mode_override=_mode_override(request))
         payload, meta = get_hypotheses(
             _client(request), _demo(request), mode_override=_mode_override(request), run_id=run_id
         )
+    except resource_access.AccessDenied as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
     except FindingsServiceError as exc:
         return JSONResponse(
             status_code=exc.status_code,
@@ -59,7 +68,12 @@ def run_hypotheses(request: Request, run_id: str, _user: Viewer) -> dict:
 
 
 @router.get("/runs/{run_id}/investigation")
-def run_investigation(request: Request, run_id: str, _user: Viewer) -> dict:
+def run_investigation(request: Request, run_id: str, user: Viewer) -> dict:
+    try:
+        resource_access.require_run_access(
+            request.app.state.settings, _client(request), user, run_id, mode_override=_mode_override(request))
+    except resource_access.AccessDenied as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
     mode = effective_data_mode(_mode_override(request), _agentguard_reachable(request))
     if mode == DataMode.LIVE:
         try:
