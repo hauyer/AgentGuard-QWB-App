@@ -280,6 +280,7 @@ def link_investigation(
             display_name=display_name,
             notes=notes,
             verification=verification,
+            verification_source=mode.value,
         )
         session.add(row)
         try:

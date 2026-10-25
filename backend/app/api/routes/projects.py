@@ -49,7 +49,7 @@ class AddMemberRequest(BaseModel):
 
 
 class LinkInvestigationRequest(BaseModel):
-    agentguard_request_id: str = Field(min_length=1, max_length=64)
+    agentguard_request_id: str = Field(min_length=1, max_length=256)
     display_name: str | None = Field(default=None, max_length=256)
     notes: str | None = Field(default=None, max_length=4000)
 

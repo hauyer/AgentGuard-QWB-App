@@ -105,24 +105,70 @@ def run_investigation(request: Request, run_id: str, user: Viewer) -> dict:
 def list_loops_for_investigation(request: Request, request_id: str, user: Viewer) -> dict:
     """List loops for a base investigation. Authorization: request_id → project membership."""
     try:
-        resource_access.require_investigation_access(
+        grant = resource_access.require_investigation_access(
             request.app.state.settings, _client(request), user, request_id, mode_override=_mode_override(request))
+        project_id = resource_access.require_trusted_investigation_project(
+            request.app.state.settings, request_id, grant)
         payload = _client(request).list_investigation_loops(request_id)
+        if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+            return JSONResponse(
+                status_code=502,
+                content={"detail": {"error": "INVALID_UPSTREAM_CONTRACT",
+                                     "message": "AgentGuard Loop 列表缺少有效的 items 字段"}},
+            )
+        loop_ids: set[str] = set()
+        for item in payload["items"]:
+            if not isinstance(item, dict):
+                return JSONResponse(
+                    status_code=502,
+                    content={"detail": {"error": "INVALID_UPSTREAM_CONTRACT",
+                                         "message": "AgentGuard Loop 列表包含无效记录"}},
+                )
+            loop_id = item.get("loop_id")
+            base_request_id = item.get("base_request_id")
+            if (not isinstance(loop_id, str) or not loop_id or loop_id.strip() != loop_id
+                    or len(loop_id) > 256 or not isinstance(base_request_id, str)
+                    or base_request_id != request_id):
+                return JSONResponse(
+                    status_code=502,
+                    content={"detail": {"error": "INVALID_UPSTREAM_CONTRACT",
+                                         "message": "AgentGuard Loop 身份字段缺失或基础调查不匹配"}},
+                )
+            if loop_id in loop_ids:
+                return JSONResponse(
+                    status_code=502,
+                    content={"detail": {"error": "INVALID_UPSTREAM_CONTRACT",
+                                         "message": "AgentGuard Loop 列表包含重复 loop_id"}},
+                )
+            loop_ids.add(loop_id)
+        resource_access.register_verified_investigation_loops(
+            request.app.state.settings,
+            request_id=request_id,
+            project_id=project_id,
+            loop_items=payload["items"],
+            created_by=user.username,
+        )
     except resource_access.AccessDenied as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
+    except resource_access.LoopOwnershipError as exc:
+        return JSONResponse(status_code=exc.status_code,
+                            content={"detail": {"error": exc.code, "message": str(exc)}})
     except AgentGuardError as exc:
         return JSONResponse(
             status_code=exc.status_code or 502,
             content={"detail": {"error": exc.code, "message": str(exc)}})
-    return {"meta": {"data_mode": "live"}, **payload}
+    return {"meta": {"data_mode": "live", "source": "agentguard", "ownership_verified": True}, **payload}
 
 
 @router.get("/investigation-loops/{loop_id}")
 def loop_detail(request: Request, loop_id: str, user: Viewer) -> dict:
     """Read a single investigation loop. Authorization: local loop_id → project map."""
     try:
-        resource_access.require_loop_access(
+        grant = resource_access.require_loop_access(
             request.app.state.settings, _client(request), user, loop_id, mode_override=_mode_override(request))
+        if grant.data_mode.value != "live":
+            return JSONResponse(status_code=503, content={"detail": {
+                "error": "LIVE_SOURCE_UNAVAILABLE", "message": "当前数据源不提供已验证的实时 Loop"}})
         payload = _client(request).get_investigation_loop(loop_id)
     except resource_access.AccessDenied as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
@@ -136,8 +182,11 @@ def loop_detail(request: Request, loop_id: str, user: Viewer) -> dict:
 @router.get("/investigation-loops/{loop_id}/decisions")
 def loop_decisions(request: Request, loop_id: str, user: Viewer) -> dict:
     try:
-        resource_access.require_loop_access(
+        grant = resource_access.require_loop_access(
             request.app.state.settings, _client(request), user, loop_id, mode_override=_mode_override(request))
+        if grant.data_mode.value != "live":
+            return JSONResponse(status_code=503, content={"detail": {
+                "error": "LIVE_SOURCE_UNAVAILABLE", "message": "当前数据源不提供已验证的实时 Loop"}})
         payload = _client(request).get_investigation_decisions(loop_id)
     except resource_access.AccessDenied as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
@@ -151,8 +200,11 @@ def loop_decisions(request: Request, loop_id: str, user: Viewer) -> dict:
 @router.get("/investigation-loops/{loop_id}/evidence-changes")
 def loop_evidence_changes(request: Request, loop_id: str, user: Viewer) -> dict:
     try:
-        resource_access.require_loop_access(
+        grant = resource_access.require_loop_access(
             request.app.state.settings, _client(request), user, loop_id, mode_override=_mode_override(request))
+        if grant.data_mode.value != "live":
+            return JSONResponse(status_code=503, content={"detail": {
+                "error": "LIVE_SOURCE_UNAVAILABLE", "message": "当前数据源不提供已验证的实时 Loop"}})
         payload = _client(request).get_investigation_evidence_changes(loop_id)
     except resource_access.AccessDenied as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
@@ -166,8 +218,11 @@ def loop_evidence_changes(request: Request, loop_id: str, user: Viewer) -> dict:
 @router.get("/investigation-loops/{loop_id}/budget")
 def loop_budget(request: Request, loop_id: str, user: Viewer) -> dict:
     try:
-        resource_access.require_loop_access(
+        grant = resource_access.require_loop_access(
             request.app.state.settings, _client(request), user, loop_id, mode_override=_mode_override(request))
+        if grant.data_mode.value != "live":
+            return JSONResponse(status_code=503, content={"detail": {
+                "error": "LIVE_SOURCE_UNAVAILABLE", "message": "当前数据源不提供已验证的实时 Loop"}})
         payload = _client(request).get_investigation_loop_budget(loop_id)
     except resource_access.AccessDenied as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})

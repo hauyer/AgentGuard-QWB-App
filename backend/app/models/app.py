@@ -78,12 +78,14 @@ class ProjectInvestigation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
-    agentguard_request_id: Mapped[str] = mapped_column(String(64), index=True)
+    agentguard_request_id: Mapped[str] = mapped_column(String(256), index=True)
     created_by: Mapped[str | None] = mapped_column(String(64))
     display_name: Mapped[str | None] = mapped_column(String(256))
     notes: Mapped[str | None] = mapped_column(Text)
     # whether the BFF verified the request_id exists upstream at link time
     verification: Mapped[str] = mapped_column(String(16), default="unverified")
+    # Existing rows cannot be assumed to have been checked against Live data.
+    verification_source: Mapped[str] = mapped_column(String(16), default="unknown")
     last_known_run_id: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -103,8 +105,8 @@ class ProjectInvestigationLoop(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
-    base_request_id: Mapped[str] = mapped_column(String(64), index=True)
-    loop_id: Mapped[str] = mapped_column(String(64), index=True)
+    base_request_id: Mapped[str] = mapped_column(String(256), index=True)
+    loop_id: Mapped[str] = mapped_column(String(256), index=True)
     created_by: Mapped[str | None] = mapped_column(String(64))
     verified_source: Mapped[str] = mapped_column(String(16), default="unverified")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
