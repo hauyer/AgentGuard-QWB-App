@@ -271,6 +271,19 @@ def require_trusted_investigation_project(
         raise LoopOwnershipError(
             "LIVE_SOURCE_REQUIRED", "Loop 归属只能根据实时 AgentGuard 数据建立", status_code=503
         )
+    return require_locally_verified_investigation_project(settings, request_id, grant)
+
+
+def require_locally_verified_investigation_project(
+    settings: Settings,
+    request_id: str,
+    grant: AccessGrant,
+) -> int:
+    """Resolve a live-verified local owner even if AgentGuard is currently down.
+
+    Used to read durable submission status during an upstream outage. The
+    caller must still establish the current user's project membership first.
+    """
     session = open_session(settings)
     if session is None:
         raise LoopOwnershipError(

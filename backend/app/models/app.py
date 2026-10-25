@@ -112,6 +112,34 @@ class ProjectInvestigationLoop(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class InvestigationLoopSubmission(Base):
+    """Durable BFF submission state for safe, idempotent loop creation."""
+
+    __tablename__ = "investigation_loop_submissions"
+    __table_args__ = (
+        UniqueConstraint("project_id", "submission_id", name="uq_project_loop_submission"),
+        UniqueConstraint("idempotency_key", name="uq_loop_submission_idempotency_key"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    base_request_id: Mapped[str] = mapped_column(String(256), index=True)
+    submission_id: Mapped[str] = mapped_column(String(36))
+    idempotency_key: Mapped[str] = mapped_column(String(64), index=True)
+    request_fingerprint: Mapped[str] = mapped_column(String(64))
+    request_payload: Mapped[str] = mapped_column(Text)
+    baseline_loop_ids: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    loop_id: Mapped[str | None] = mapped_column(String(256), index=True)
+    response_payload: Mapped[str | None] = mapped_column(Text)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    error_status_code: Mapped[int | None] = mapped_column()
+    created_by: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class InvestigationBookmark(Base):
     __tablename__ = "investigation_bookmarks"
     __table_args__ = (UniqueConstraint("user_id", "request_id", name="uq_user_bookmark"),)

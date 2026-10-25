@@ -107,6 +107,7 @@ class AgentGuardClient:
         body: Mapping[str, Any] | None = None,
         request_id: str | None = None,
         operator: bool = False,
+        loop_idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         if not path.startswith("/v1/") or "?" in path or "#" in path:
             raise ValueError("path must be a versioned AgentGuard /v1 path")
@@ -122,6 +123,8 @@ class AgentGuardClient:
             headers["X-AgentGuard-Token"] = self._settings.agentguard_api_token
         if operator and self._settings.agentguard_operator_api_token:
             headers["X-AgentGuard-Operator-Token"] = self._settings.agentguard_operator_api_token
+        if loop_idempotency_key:
+            headers["X-Loop-Idempotency-Key"] = loop_idempotency_key
 
         params: dict[str, Any] = {key: value for key, value in (query or {}).items() if value is not None}
         json_body = None
@@ -370,6 +373,25 @@ class AgentGuardClient:
         """E6 get budget consumption for a loop."""
         return self.request("GET", f"/v1/investigation-loops/{_quote(loop_id)}/budget")
 
+    def create_investigation_loop(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Create one loop with the separate Operator credential and stable key.
+
+        POST is never retried by this client. The service layer persists the
+        key before calling this method and reconciles any ambiguous result.
+        """
+        return self.request(
+            "POST",
+            "/v1/investigation-loops",
+            body=payload,
+            operator=True,
+            loop_idempotency_key=idempotency_key,
+        )
+
     # ------------------------------------------------------------------ #
     # capability discovery
     # ------------------------------------------------------------------ #
@@ -394,6 +416,8 @@ class AgentGuardClient:
             "GET /v1/system/readiness",
             "GET /v1/investigations/options",
             "GET /v1/reports",
+            "GET /v1/investigation-loops",
+            "POST /v1/investigation-loops",
         ]
         try:
             response = self._http.get("/openapi.json")

@@ -8,6 +8,32 @@ import type {
 } from "../types/investigations";
 import { apiGet, apiPost } from "./api";
 
+export type LoopStrategy = "fixed_order" | "risk_score" | "information_value" | "experience" | "llm";
+export type LoopDataPartition = "training" | "validation" | "test" | "held_out_family";
+
+export interface CreateInvestigationLoopRequest {
+  submission_id: string;
+  strategy: LoopStrategy;
+  max_actions: number;
+  max_seconds: number;
+  max_model_calls: number;
+  no_new_evidence_rounds: number;
+  data_partition: LoopDataPartition;
+  authorization_ref?: string | null;
+}
+
+export interface InvestigationLoopSubmissionResponse {
+  meta: { data_mode: "live"; source: "agentguard" };
+  submission: {
+    submission_id: string;
+    status: "PREPARED" | "SUBMITTING" | "SUBMISSION_AMBIGUOUS" | "LINK_PENDING" | "COMPLETED" | "FAILED";
+    loop_id: string | null;
+    created_at: string | null;
+    error: { code: string; message: string } | null;
+  };
+  loop: Record<string, unknown> | null;
+}
+
 export function fetchInvestigations(
   params: { status?: string; limit?: number; offset?: number },
   signal?: AbortSignal,
@@ -41,6 +67,36 @@ export function submitInvestigation(body: CreateInvestigationRequest): Promise<{
   created: InvestigationDetail;
 }> {
   return apiPost("/investigations", body);
+}
+
+export function submitInvestigationLoop(
+  requestId: string,
+  body: CreateInvestigationLoopRequest,
+): Promise<InvestigationLoopSubmissionResponse> {
+  return apiPost<InvestigationLoopSubmissionResponse>(
+    `/investigations/${encodeURIComponent(requestId)}/loops`,
+    body,
+  );
+}
+
+export function fetchInvestigationLoopSubmission(
+  requestId: string,
+  submissionId: string,
+  signal?: AbortSignal,
+): Promise<InvestigationLoopSubmissionResponse> {
+  return apiGet<InvestigationLoopSubmissionResponse>(
+    `/investigations/${encodeURIComponent(requestId)}/loop-submissions/${encodeURIComponent(submissionId)}`,
+    signal,
+  );
+}
+
+export function reconcileInvestigationLoopSubmission(
+  requestId: string,
+  submissionId: string,
+): Promise<InvestigationLoopSubmissionResponse> {
+  return apiPost<InvestigationLoopSubmissionResponse>(
+    `/investigations/${encodeURIComponent(requestId)}/loop-submissions/${encodeURIComponent(submissionId)}/reconcile`,
+  );
 }
 
 export function fetchScenarios(signal?: AbortSignal): Promise<{ items: Scenario[] }> {

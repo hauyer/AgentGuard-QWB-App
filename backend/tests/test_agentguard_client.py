@@ -59,6 +59,23 @@ def test_sends_token_and_request_id_headers() -> None:
     assert transport.requests[1].headers["X-AgentGuard-Token"] == "api-secret"
 
 
+def test_loop_create_sends_operator_and_idempotency_headers_without_retry() -> None:
+    settings = make_settings(agentguard_api_token="api-secret", agentguard_operator_api_token="operator-secret")
+    transport = _transport_returning(
+        httpx.Response(503, json={"detail": {"error": "TRY_AGAIN", "message": "upstream unavailable"}})
+    )
+    payload = {"schema_version": "1.0", "base_request_id": "inv-1", "strategy": "information_value"}
+    with AgentGuardClient(settings, transport=transport) as client, pytest.raises(AgentGuardError):
+        client.create_investigation_loop(payload, idempotency_key="stable-key")
+    assert len(transport.requests) == 1
+    request = transport.requests[0]
+    assert request.method == "POST"
+    assert request.url.path == "/v1/investigation-loops"
+    assert request.headers["X-AgentGuard-Operator-Token"] == "operator-secret"
+    assert request.headers["X-Loop-Idempotency-Key"] == "stable-key"
+    assert json.loads(request.content) == payload
+
+
 def test_does_not_send_token_when_unset() -> None:
     settings = make_settings()
     transport = _transport_returning(httpx.Response(200, json={"status": "ok"}))

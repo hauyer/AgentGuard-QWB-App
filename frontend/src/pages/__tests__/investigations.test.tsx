@@ -214,6 +214,7 @@ describe("InvestigationDetailPage", () => {
     expect(screen.getByText("run-qwb-0001")).toBeInTheDocument();
     expect(screen.getByText("调查时间线")).toBeInTheDocument();
     expect(screen.getByText("调查完成")).toBeInTheDocument();
+    expect(screen.getByText(/Demo、Recorded 与 Synthetic 数据不会调用真实 Operator API/)).toBeInTheDocument();
     expect(screen.getByText("计划 plan-qwb-0001")).toBeInTheDocument();
     // result JSON is collapsed by default; expand it before asserting content
     await userEvent.click(screen.getByRole("button", { name: /展开/ }));
