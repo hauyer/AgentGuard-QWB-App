@@ -7,6 +7,8 @@ import { DemoCenterPage } from "../pages/DemoCenterPage";
 import { EvidencePage } from "../pages/EvidencePage";
 import { ExperiencesPage } from "../pages/ExperiencesPage";
 import { ExperimentsPage } from "../pages/ExperimentsPage";
+import { FindingsPage } from "../pages/FindingsPage";
+import { HypothesesPage } from "../pages/HypothesesPage";
 import { InteractionGraphPage } from "../pages/InteractionGraphPage";
 import { InvestigationDetailPage } from "../pages/InvestigationDetailPage";
 import { InvestigationWorkspacePage } from "../pages/InvestigationWorkspacePage";
@@ -30,6 +32,8 @@ export const router = createBrowserRouter([
       { path: "investigations/:requestId/workspace", element: <InvestigationWorkspacePage /> },
       { path: "interaction-graph", element: <InteractionGraphPage /> },
       { path: "evidence", element: <EvidencePage /> },
+      { path: "findings", element: <FindingsPage /> },
+      { path: "hypotheses", element: <HypothesesPage /> },
       { path: "defenses", element: <DefensePage /> },
       { path: "experiments", element: <ExperimentsPage /> },
       { path: "experiences", element: <ExperiencesPage /> },

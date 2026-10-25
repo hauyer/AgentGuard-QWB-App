@@ -169,6 +169,14 @@ class DemoService:
     def get_graph(self) -> dict | None:
         return self.fixture("graph.json")
 
+    def get_findings(self, run_id: str) -> dict | None:
+        items = self.fixture("findings.json").get("items", {})
+        return items.get(run_id)
+
+    def get_hypotheses(self, run_id: str) -> dict | None:
+        items = self.fixture("hypotheses.json").get("items", {})
+        return items.get(run_id)
+
     # ------------------------------------------------------------------ #
     # aggregates used by the dashboard in demo mode
     # ------------------------------------------------------------------ #

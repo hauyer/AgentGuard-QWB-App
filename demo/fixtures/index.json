@@ -159,6 +159,40 @@
       "not_provable": [
         "报告指标与源数据一致，不推断新的因果结论。"
       ]
+    },
+    {
+      "fixture_id": "fx-findings-001",
+      "file": "findings.json",
+      "data_mode": "recorded",
+      "source": "derived from recorded investigation risk analysis",
+      "collected_at": "2026-10-25T09:00:00.000Z",
+      "agentguard_version": "1.1.0rc1",
+      "agentguard_commit": "3c34931f983b545c77ee79f866425eb63053807b",
+      "sanitized": true,
+      "sha256": "5b508a744642ab060465f9364ec50bbea8636e0785f6b1b08c94c8ecfc2def21",
+      "capabilities": [
+        "findings.read"
+      ],
+      "not_provable": [
+        "观测性发现不构成因果结论。"
+      ]
+    },
+    {
+      "fixture_id": "fx-hypotheses-001",
+      "file": "hypotheses.json",
+      "data_mode": "recorded",
+      "source": "derived from recorded investigation hypotheses",
+      "collected_at": "2026-10-25T09:00:00.000Z",
+      "agentguard_version": "1.1.0rc1",
+      "agentguard_commit": "3c34931f983b545c77ee79f866425eb63053807b",
+      "sanitized": true,
+      "sha256": "0aec8be4ef93dbed8172e838b706ba833722ed338a21b0ff5e15a42a404dfebe",
+      "capabilities": [
+        "hypotheses.read"
+      ],
+      "not_provable": [
+        "假设为待验证推测，不构成已确认结论。"
+      ]
     }
   ]
 }

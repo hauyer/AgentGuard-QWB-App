@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "items": {
+    "run-qwb-0001": {
+      "run_id": "run-qwb-0001",
+      "items": [
+        {
+          "hypothesis_id": "hp-qwb-0001",
+          "finding_id": "fd-qwb-0001",
+          "statement": "Agent A 被诱导通过工具调用执行了超出授权范围的操作",
+          "rationale": "工具调用频率异常且与外部输入时间相关",
+          "supporting_evidence": ["ev-qwb-0001", "ev-qwb-0002"],
+          "contradicting_evidence": [],
+          "needs_verification": ["需要 Probe/SAE 验证内部表征是否偏离", "需要因果干预确认工具调用是攻击结果而非正常行为"],
+          "recommended_action": "causal_audit"
+        },
+        {
+          "hypothesis_id": "hp-qwb-0002",
+          "finding_id": "fd-qwb-0002",
+          "statement": "Agent B 接收了经过注入的指令并修改了行为",
+          "rationale": "干预实验中 Agent B 的输出与注入载荷高度相关",
+          "supporting_evidence": ["ev-qwb-0003"],
+          "contradicting_evidence": [],
+          "needs_verification": ["需要验证注入载荷是否在真实用户输入中自然出现"],
+          "recommended_action": "observation"
+        }
+      ]
+    }
+  }
+}
