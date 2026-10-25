@@ -11,6 +11,7 @@ import { FindingsPage } from "../pages/FindingsPage";
 import { HypothesesPage } from "../pages/HypothesesPage";
 import { InteractionGraphPage } from "../pages/InteractionGraphPage";
 import { InvestigationDetailPage } from "../pages/InvestigationDetailPage";
+import { InvestigationJournalPage } from "../pages/InvestigationJournalPage";
 import { InvestigationWorkspacePage } from "../pages/InvestigationWorkspacePage";
 import { InvestigationsListPage } from "../pages/InvestigationsListPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
       { path: "evidence", element: <EvidencePage /> },
       { path: "findings", element: <FindingsPage /> },
       { path: "hypotheses", element: <HypothesesPage /> },
+      { path: "investigation-journal", element: <InvestigationJournalPage /> },
       { path: "defenses", element: <DefensePage /> },
       { path: "experiments", element: <ExperimentsPage /> },
       { path: "experiences", element: <ExperiencesPage /> },

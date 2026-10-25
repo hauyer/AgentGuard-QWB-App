@@ -193,6 +193,23 @@
       "not_provable": [
         "假设为待验证推测，不构成已确认结论。"
       ]
+    },
+    {
+      "fixture_id": "fx-investigation-001",
+      "file": "investigation.json",
+      "data_mode": "recorded",
+      "source": "derived from recorded multi-round investigation journal",
+      "collected_at": "2026-10-25T09:00:00.000Z",
+      "agentguard_version": "1.1.0rc1",
+      "agentguard_commit": "3c34931f983b545c77ee79f866425eb63053807b",
+      "sanitized": true,
+      "sha256": "d660ac3b53bfc2ef9d96f93fc9766e8dfd33c13542941375f22f9668669c9e51",
+      "capabilities": [
+        "investigation.read"
+      ],
+      "not_provable": [
+        "多轮调查记录为回放数据，不代表实时模型运行。"
+      ]
     }
   ]
 }

@@ -177,6 +177,10 @@ class DemoService:
         items = self.fixture("hypotheses.json").get("items", {})
         return items.get(run_id)
 
+    def get_investigation_journal(self, run_id: str) -> dict | None:
+        items = self.fixture("investigation.json").get("items", {})
+        return items.get(run_id)
+
     # ------------------------------------------------------------------ #
     # aggregates used by the dashboard in demo mode
     # ------------------------------------------------------------------ #

@@ -31,6 +31,7 @@ const NAV_ITEMS = [
   { to: "/evidence", label: "证据分析", icon: ScrollText },
   { to: "/findings", label: "风险发现", icon: AlertTriangle },
   { to: "/hypotheses", label: "调查假设", icon: HelpCircle },
+  { to: "/investigation-journal", label: "多轮调查", icon: Target },
   { to: "/defenses", label: "定向防御", icon: ShieldCheck },
   { to: "/experiments", label: "实验对比", icon: FlaskConical },
   { to: "/experiences", label: "经验中心", icon: BookOpenText },
