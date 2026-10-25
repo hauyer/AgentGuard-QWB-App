@@ -14,6 +14,7 @@ import { InvestigationDetailPage } from "../pages/InvestigationDetailPage";
 import { InvestigationJournalPage } from "../pages/InvestigationJournalPage";
 import { InvestigationWorkspacePage } from "../pages/InvestigationWorkspacePage";
 import { InvestigationsListPage } from "../pages/InvestigationsListPage";
+import { MultiRoundReportPage } from "../pages/MultiRoundReportPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { ReportsPage } from "../pages/ReportsPage";
 import { SettingsPage } from "../pages/SettingsPage";
@@ -42,6 +43,7 @@ export const router = createBrowserRouter([
       { path: "strategy-comparison", element: <StrategyComparisonPage /> },
       { path: "experiences", element: <ExperiencesPage /> },
       { path: "reports", element: <ReportsPage /> },
+      { path: "multi-round-report", element: <MultiRoundReportPage /> },
       { path: "settings", element: <SettingsPage /> },
     ],
   },
