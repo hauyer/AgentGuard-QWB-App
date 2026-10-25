@@ -349,10 +349,10 @@ class AgentGuardClient:
         return self.request("GET", f"/v1/investigations/{_quote(request_id)}/risk-analysis")
 
     def list_investigation_loops(self, base_request_id: str, *, limit: int = 20, offset: int = 0) -> dict[str, Any]:
-        """E6 list investigation loops for a base request."""
+        """E6 list investigation loops filtered by base_request_id."""
         return self.request(
-            "GET", f"/v1/investigations/{_quote(base_request_id)}/loops",
-            query={"limit": limit, "offset": offset})
+            "GET", "/v1/investigation-loops",
+            query={"base_request_id": base_request_id, "limit": limit, "offset": offset})
 
     def get_investigation_loop(self, loop_id: str) -> dict[str, Any]:
         """E6 get a single investigation loop by loop_id."""
