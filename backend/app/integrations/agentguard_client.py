@@ -342,6 +342,35 @@ class AgentGuardClient:
         return self.request("GET", f"/v1/runs/{_quote(run_id)}/investigation")
 
     # ------------------------------------------------------------------ #
+    # E6: investigation service (loop-scoped)
+    # ------------------------------------------------------------------ #
+    def get_risk_analysis(self, request_id: str) -> dict[str, Any]:
+        """E6 risk analysis summary for a base investigation."""
+        return self.request("GET", f"/v1/investigations/{_quote(request_id)}/risk-analysis")
+
+    def list_investigation_loops(self, base_request_id: str, *, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+        """E6 list investigation loops for a base request."""
+        return self.request(
+            "GET", f"/v1/investigations/{_quote(base_request_id)}/loops",
+            query={"limit": limit, "offset": offset})
+
+    def get_investigation_loop(self, loop_id: str) -> dict[str, Any]:
+        """E6 get a single investigation loop by loop_id."""
+        return self.request("GET", f"/v1/investigation-loops/{_quote(loop_id)}")
+
+    def get_investigation_decisions(self, loop_id: str) -> dict[str, Any]:
+        """E6 get per-round decisions for a loop."""
+        return self.request("GET", f"/v1/investigation-loops/{_quote(loop_id)}/decisions")
+
+    def get_investigation_evidence_changes(self, loop_id: str) -> dict[str, Any]:
+        """E6 get evidence delta across rounds for a loop."""
+        return self.request("GET", f"/v1/investigation-loops/{_quote(loop_id)}/evidence-changes")
+
+    def get_investigation_loop_budget(self, loop_id: str) -> dict[str, Any]:
+        """E6 get budget consumption for a loop."""
+        return self.request("GET", f"/v1/investigation-loops/{_quote(loop_id)}/budget")
+
+    # ------------------------------------------------------------------ #
     # capability discovery
     # ------------------------------------------------------------------ #
     def discover_operations(self) -> dict[str, bool]:
