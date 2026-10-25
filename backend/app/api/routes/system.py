@@ -31,6 +31,60 @@ def system_status(
     return build_system_status(client, data_mode_override=data_mode_override)
 
 
+@router.get("/system/readiness")
+def system_readiness(
+    request: Request,
+    client: AgentGuardClientDep,
+    _user: CurrentUserDep,
+) -> dict:
+    """B20 layered readiness: per-capability status from the D-round endpoint,
+    with capability discovery verdicts layered on top. Unknown layers are
+    reported as such - API reachability never implies probe/SAE/intervention
+    support."""
+    data_mode_override = request.app.state.settings.app_data_mode or None
+    mode = request.app.state.settings.app_data_mode or (
+        "live" if _reachable(client) else "unavailable")
+    operations = client.discover_operations()
+    discovery = {
+        "interaction_graph": operations.get("GET /v1/investigations/{request_id}/interaction-graph", False),
+        "investigation_timeline": operations.get("GET /v1/investigations/{request_id}/timeline", False),
+        "investigation_options": operations.get("GET /v1/investigations/options", False),
+        "experiments_index": operations.get("GET /v1/experiments", False),
+        "report_list": operations.get("GET /v1/reports", False),
+        "run_findings": operations.get("GET /v1/runs/{run_id}/findings", False),
+        "run_hypotheses": operations.get("GET /v1/runs/{run_id}/hypotheses", False),
+        "run_investigation_journal": operations.get("GET /v1/runs/{run_id}/investigation", False),
+        "discovery_error": client.discovery_error,
+    }
+    readiness_payload = None
+    readiness_error = None
+    if _reachable(client):
+        try:
+            readiness_payload = client.get_readiness()
+        except Exception as exc:  # noqa: BLE001 - degraded readiness is data, not a crash
+            readiness_error = f"{type(exc).__name__}"
+    else:
+        # B20-4: an unreachable upstream is an explicit readiness failure,
+        # never a silent degrade to another data mode.
+        readiness_error = "AGENTGUARD_UNREACHABLE"
+    return {
+        "data_mode": data_mode_override or mode,
+        "readiness": readiness_payload,
+        "readiness_error": readiness_error,
+        "capabilities": discovery,
+    }
+
+
+def _reachable(client: AgentGuardClient) -> bool:
+    from app.integrations.agentguard_client import AgentGuardError
+
+    try:
+        client.health()
+        return True
+    except AgentGuardError:
+        return False
+
+
 @router.get("/system/settings")
 def system_settings(request: Request, user: CurrentUserDep) -> dict:
     settings = request.app.state.settings

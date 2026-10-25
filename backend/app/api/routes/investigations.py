@@ -100,6 +100,47 @@ def investigations_create(
     return {"meta": meta, "created": payload}
 
 
+@router.get("/investigations/options")
+def investigations_options(
+    request: Request,
+    client: AgentGuardClientDep,
+    _user: Viewer,
+) -> dict:
+    """B20 real resource discovery (D7): per-mode submittable flags and
+    blockers rendered verbatim - the create form never invents resource IDs.
+    Registered BEFORE /investigations/{request_id} so "options" is not
+    captured as a request_id."""
+    from app.core.data_mode import effective_data_mode
+
+    mode = effective_data_mode(
+        _mode_override(request), _reachable(request.app.state.agentguard_client))
+    if mode.value != "live":
+        return {"meta": {"data_mode": mode.value},
+                "available": False,
+                "modes": [],
+                "note": "options 端点仅 Live 模式提供；演示模式使用固定夹具资源。"}
+    try:
+        payload = client.get_investigation_options()
+    except Exception as exc:  # noqa: BLE001 - upstream failure is rendered data
+        from app.integrations.agentguard_client import AgentGuardError
+
+        code = exc.code if isinstance(exc, AgentGuardError) else "OPTIONS_UNAVAILABLE"
+        message = str(exc) if isinstance(exc, AgentGuardError) else "无法获取调查选项"
+        return JSONResponse(status_code=502,
+                            content={"detail": {"error": code, "message": message}})
+    return {"meta": {"data_mode": "live"}, **payload}
+
+
+def _reachable(client) -> bool:
+    from app.integrations.agentguard_client import AgentGuardError
+
+    try:
+        client.health()
+        return True
+    except AgentGuardError:
+        return False
+
+
 @router.get("/investigations/{request_id}")
 def investigations_detail(
     request: Request,
@@ -168,6 +209,18 @@ def scenarios_list(
     except InvestigationServiceError as exc:
         return _error_response(exc)
     return {"meta": meta, **payload}
+
+
+
+
+def _reachable(client) -> bool:
+    from app.integrations.agentguard_client import AgentGuardError
+
+    try:
+        client.health()
+        return True
+    except AgentGuardError:
+        return False
 
 
 def _error_response(exc) -> JSONResponse:

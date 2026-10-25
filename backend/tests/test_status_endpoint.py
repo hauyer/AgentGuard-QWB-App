@@ -50,7 +50,7 @@ def test_status_live_when_agentguard_and_warden_available(stub_base_url_warden_a
     body = response.json()
     assert body["data_mode"] == "live"
     assert body["agentguard"]["reachable"] is True
-    assert body["agentguard"]["health"]["version"].endswith("-stub")
+    assert body["agentguard"]["health"]["version"] == "1.1.0rc1"
     assert body["warden"]["status"] == "available"
     assert body["capabilities"]["backend_mode"] == "synthetic"
     by_name = {feature["name"]: feature for feature in body["features"]}

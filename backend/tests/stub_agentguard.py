@@ -90,7 +90,64 @@ def create_stub_app(
 
     @app.get("/v1/system/health")
     def health() -> dict:
-        return {"status": "ok", "service": "agentguard", "version": APP_VERSION}
+        return {"status": "ok", "service": "agentguard", "version": "1.1.0rc1"}
+
+    @app.get("/v1/system/readiness")
+    def readiness() -> dict:
+        return {
+            "schema_version": "1.0",
+            "checks": [
+                {"schema_version": "1.0", "name": "agentguard_api", "status": "available",
+                 "source": "agentguard:self", "blockers": [], "diagnostics": {}},
+                {"schema_version": "1.0", "name": "warden_connectivity", "status": "available",
+                 "source": "warden:diagnostics", "blockers": [], "diagnostics": {}},
+                {"schema_version": "1.0", "name": "contract_source", "status": "unknown",
+                 "source": "warden:diagnostics", "blockers": ["NO_THREAT_CONTRACTS"], "diagnostics": {}},
+                {"schema_version": "1.0", "name": "agent_runtime", "status": "blocked",
+                 "source": "agentguard:self", "blockers": ["COMPONENT_UNAVAILABLE:agent.runtime"],
+                 "diagnostics": {}},
+            ],
+        }
+
+    @app.get("/v1/investigations/options")
+    def investigation_options() -> dict:
+        return {
+            "schema_version": "1.0",
+            "available": False,
+            "error_code": None,
+            "modes": [
+                {"schema_version": "1.0", "mode": "observation", "plan_creation": "blocked",
+                 "run_execution": "unavailable", "submittable": False,
+                 "blockers": ["NO_THREAT_CONTRACTS", "COMPONENT_UNAVAILABLE:agent.runtime"], "note": ""},
+                {"schema_version": "1.0", "mode": "detection", "plan_creation": "blocked",
+                 "run_execution": "unavailable", "submittable": False,
+                 "blockers": ["NO_THREAT_CONTRACTS"], "note": ""},
+            ],
+        }
+
+    @app.get("/v1/investigations/{request_id}/timeline")
+    def investigation_timeline(request_id: str) -> dict:
+        if request_id not in known_investigations:
+            raise HTTPException(status_code=404,
+                                detail={"error": "WORKFLOW_NOT_FOUND", "message": "unknown workflow"})
+        return {
+            "request_id": request_id,
+            "events": [
+                {"event_type": "workflow_created", "at": datetime.now(UTC).isoformat()},
+                {"event_type": "plan_submitted", "at": datetime.now(UTC).isoformat(),
+                 "message": "plan submitted to WARDEN"},
+            ],
+        }
+
+    @app.get("/v1/reports")
+    def list_reports(limit: int = 50, offset: int = 0) -> dict:
+        items = [{
+            "run_id": "run-stub-0001", "experiment_id": "exp-stub-0001",
+            "scenario_id": "scenario-stub", "status": "completed",
+            "backend_mode": "synthetic", "created_at": datetime.now(UTC).isoformat(),
+        }]
+        return {"schema_version": "1.0", "items": items, "count": len(items),
+                "offset": offset, "limit": limit, "next_offset": None}
 
     @app.get("/v1/system/capabilities")
     def capabilities() -> dict:

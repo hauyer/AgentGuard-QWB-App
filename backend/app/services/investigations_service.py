@@ -250,6 +250,7 @@ def get_investigation(
 
 
 RUN_TIMELINE_OPERATION = "GET /v1/runs/{run_id}/timeline"
+REQUEST_TIMELINE_OPERATION = "GET /v1/investigations/{request_id}/timeline"
 
 
 def get_timeline(
@@ -261,24 +262,30 @@ def get_timeline(
             detail = client.get_investigation(request_id)
         except AgentGuardError as exc:
             raise _to_service_error(exc) from exc
-        run_id = detail.get("run_id")
         operations = client.discover_operations()
+        run_id = detail.get("run_id")
+        # B20: D7 publishes the request_id-scoped timeline - prefer it, then the
+        # run-scoped form, then the clearly-labelled derived view.
+        if operations.get(REQUEST_TIMELINE_OPERATION):
+            try:
+                payload = client.get_investigation_timeline(request_id)
+                events = _normalize_run_timeline(payload, run_id or request_id)
+                return events, {"data_mode": "live", "timeline_source": "upstream",
+                                "run_id": run_id, "upstream_form": "investigation"}
+            except AgentGuardError as exc:
+                if exc.status_code != 404:
+                    raise _to_service_error(exc) from exc
         if run_id and operations.get(RUN_TIMELINE_OPERATION):
-            # Persisted upstream events take precedence over state-derived steps;
-            # fall back to the derived view (clearly labelled) only when the
-            # upstream has no timeline for this run yet.
             try:
                 payload = client.get_run_timeline(run_id)
                 events = _normalize_run_timeline(payload, run_id)
-                return events, {"data_mode": "live", "timeline_source": "upstream", "run_id": run_id}
+                return events, {"data_mode": "live", "timeline_source": "upstream",
+                                "run_id": run_id, "upstream_form": "run"}
             except AgentGuardError as exc:
-                if exc.status_code == 404:
-                    return (_derive_timeline(detail),
-                            {"data_mode": "live", "timeline_source": "derived",
-                             "derived_reason": f"上游尚无 run {run_id} 的时间线（404）"})
-                raise _to_service_error(exc) from exc
+                if exc.status_code != 404:
+                    raise _to_service_error(exc) from exc
         reason = ("调查尚未产生 run_id（preflight blocked）" if not run_id
-                  else "AgentGuard pinned 版本未发布 run 时间线接口")
+                  else "上游尚无该调查的持久化时间线（404）")
         return (_derive_timeline(detail),
                 {"data_mode": "live", "timeline_source": "derived", "derived_reason": reason})
     if mode in (DataMode.RECORDED, DataMode.SYNTHETIC):

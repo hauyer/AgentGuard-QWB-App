@@ -1,67 +1,67 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "pinned_agentguard": {
     "repository": "https://github.com/hauyer/AgentGuard",
-    "branch": "feature/qwb-public-api-integration",
-    "commit": "907aa1971bd4aff3b481a51b8ae19ee04eb82db4",
-    "commit_short": "907aa19",
-    "commit_subject": "Add read-only experiment index and comparison API (C2)",
-    "pinned_at": "2026-10-24",
-    "previous_pin": "7d42809172059b1f38200bd8308c73345efd77dc (A8, B10; branch feature/agentguard-upper-layer-v1)",
-    "upstream_version": "1.0.0rc1",
-    "pinned_by": "B11 verification (scripts/live_agentguard_check.py + scripts/check_agentguard_contract.py against the running service)",
+    "branch": "feature/d-real-investigation",
+    "commit": "3c34931f983b545c77ee79f866425eb63053807b",
+    "commit_short": "3c34931",
+    "commit_subject": "Complete release acceptance with security review and research suite (D7)",
+    "pinned_at": "2026-10-25",
+    "previous_pin": "907aa1971bd4aff3b481a51b8ae19ee04eb82db4 (C2, B11-B19; branch feature/qwb-public-api-integration)",
+    "upstream_version": "1.1.0rc1",
     "local_clone": "D:/study homework/stego/AgentGuard (read-only)"
   },
   "openapi": {
-    "path_count": 72,
-    "sha256_canonical_json": "a40d20c71ad022ca6320a7b8027af9c947c2f62147d66e451102b161644f0b22",
-    "verified_at": "2026-10-24",
-    "snapshot": "integration-data/agentguard-openapi-907aa19.json"
+    "path_count": 76,
+    "sha256_canonical_json": "ab8535a0ebb6c989e700f9bad3b48a13f29c61a4d3e7c20bfed94def6c7d0117",
+    "verified_at": "2026-10-25",
+    "snapshot": "integration-data/agentguard-openapi-3c34931.json"
   },
   "api_documentation": {
-    "public_api_doc": "docs/PUBLIC_API.md",
-    "release_api_reference": "docs/release/API_REFERENCE.md",
-    "router_module": "src/agentguard/api/public_routes.py",
-    "request_contract": "src/agentguard/contracts/warden.py (WardenAuditRequest + WardenDefenseExecuteRequest)",
-    "truth_guard": "src/agentguard/contracts/truth_guard.py (hidden-truth metadata rejection)",
-    "interaction_graph": "src/agentguard/services/interaction_graph.py (C1, new at 907aa19)",
-    "experiment_index": "src/agentguard/services/experiment_index.py (C2, new at 907aa19)",
-    "openapi_diff_report": "docs/api/AGENTGUARD_OPENAPI_DIFF_B10.md"
+    "request_contract": "src/agentguard/contracts/warden.py",
+    "truth_guard": "src/agentguard/contracts/truth_guard.py",
+    "readiness": "src/agentguard/contracts/system_readiness.py (D-round: layered readiness checks)",
+    "investigation_options": "options endpoint modes[].submittable/blockers (real resource discovery)",
+    "multi_round_loop": "GET /v1/runs/{run_id}/investigation (D3 loop journal) + /timeline",
+    "risk_hypotheses": "GET /v1/runs/{run_id}/findings + /hypotheses (E1 semantics)",
+    "openapi_diff_report": "docs/api/AGENTGUARD_OPENAPI_DIFF_B20.md"
   },
   "supported_endpoints": [
     "GET /v1/system/health",
+    "GET /v1/system/readiness",
     "GET /v1/system/capabilities",
     "GET /v1/kernel/status",
+    "GET /v1/investigations/options",
     "GET /v1/scenarios",
     "POST /v1/investigations",
     "GET /v1/investigations",
     "GET /v1/investigations/{request_id}",
+    "GET /v1/investigations/{request_id}/timeline",
     "GET /v1/investigations/{request_id}/interaction-graph",
+    "GET /v1/runs/{run_id}/findings",
+    "GET /v1/runs/{run_id}/hypotheses",
+    "GET /v1/runs/{run_id}/investigation",
     "GET /v1/evidence/investigations/{request_id}",
     "GET /v1/defense-policies/{request_id}",
     "POST /v1/defense-policies/{request_id}/preview",
+    "GET /v1/reports",
     "GET /v1/reports/{run_id}",
     "GET /v1/experiences",
     "GET /v1/experiments",
     "GET /v1/experiments/{experiment_id}",
+    "POST /v1/experiments/compare",
     "GET /v1/system/audit-events"
   ],
   "candidate_endpoints": {
-    "description": "B13 watchlist: upstream development targets, availability verified against the pinned commit's live OpenAPI",
+    "description": "B20 verified against the pinned commit's live OpenAPI (76 paths)",
     "available": [
-      "GET /v1/investigations/{request_id}/interaction-graph",
-      "GET /v1/experiments",
-      "GET /v1/experiments/{experiment_id}",
-      "POST /v1/experiments/compare"
-    ],
-    "not_published_yet": [
       "GET /v1/system/readiness",
       "GET /v1/investigations/options",
-      "GET /v1/investigations/{request_id}/timeline (note: GET /v1/runs/{run_id}/timeline exists)",
-      "GET /v1/reports (list; single GET /v1/reports/{run_id} remains available)"
-    ],
-    "in_progress_upstream": [
-      "SystemReadinessService (contracts/services files present uncommitted in the local clone at verification time; not wired to a route yet)"
+      "GET /v1/investigations/{request_id}/timeline",
+      "GET /v1/reports (list)",
+      "GET /v1/runs/{run_id}/findings",
+      "GET /v1/runs/{run_id}/hypotheses",
+      "GET /v1/runs/{run_id}/investigation (multi-round journal)"
     ]
   },
   "auth": {
@@ -70,14 +70,13 @@
     "approval": "AGENTGUARD_APPROVAL_TOKEN (approval-sensitive actions only)"
   },
   "known_semantics": {
+    "readiness": "layered checks[] with status available/unknown/blocked per capability; source-tagged",
+    "options": "per-mode submittable flag + blockers[] (NO_THREAT_CONTRACTS, COMPONENT_UNAVAILABLE:...) - the create form must render these verbatim",
     "warden_missing": "503 detail.error=WARDEN_NOT_CONFIGURED on investigation submission",
-    "request_id": "X-Request-ID on every response; caller value preserved; local workflow registration idempotent per request_id",
-    "ambiguity": "submission state uncertainty reported as ambiguous and reconciled read-only; never auto-resubmitted",
-    "metadata_guard": "hidden evaluator fields (oracle/ground_truth/label ...) rejected 422 by the upstream contract",
-    "validation_errors": "422 bodies contain only error type, field location and a generic message",
+    "request_id": "X-Request-ID echoed; local workflow registration idempotent per request_id",
+    "metadata_guard": "hidden evaluator fields rejected 422",
     "pagination": "items/count/offset/limit/next_offset",
     "evidence_levels": ["synthetic", "observational", "interventional", "causal_validated"],
-    "defense_execute": "POST /v1/defense-policies/{id}/execute remains a compatibility entry; executor missing => honest unsupported response",
-    "defense_preview_500": "QWB-INT-008: GET/POST /v1/defense-policies/{id} (incl. preview) returns 500 INTERNAL_SERVER_ERROR with AgentGuard 1.0.0rc1 + WARDEN 0.2.0 (upstream TypeError)"
+    "defense_execute": "compatibility entry; executor missing => honest unsupported response"
   }
 }

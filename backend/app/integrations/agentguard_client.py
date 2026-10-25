@@ -1,12 +1,12 @@
 """Unified AgentGuard API client (BFF connector).
 
-Contract baseline (B10): AgentGuard commit 7d42809172059b1f38200bd8308c73345efd77dc
-(feature/agentguard-upper-layer-v1, "Record A8 cross-version acceptance"),
-documented in docs/api/AGENTGUARD_API_MATRIX.md and the OpenAPI diff report
-docs/api/AGENTGUARD_OPENAPI_DIFF_B10.md. Business paths are unchanged from the
-A7 baseline; A8 adds hidden-truth metadata rejection upstream (mirrored by the
-BFF schema), sanitized 422 bodies, and explicit request_id idempotency with
-read-only reconciliation for ambiguous submissions.
+Contract baseline (B20): AgentGuard commit 3c34931f983b545c77ee79f866425eb63053807b
+(feature/d-real-investigation, "Complete release acceptance with security review
+and research suite (D7)", 1.1.0rc1). D-round adds layered readiness, real
+investigation options, request_id-scoped timeline, report listing and the E1
+findings/hypotheses APIs; capability discovery below guards every tracked
+operation so older pins degrade explicitly. Prior baselines: 907aa19 (C2),
+7d42809 (A8).
 
 Safety rules enforced here (mirror the upstream SDK contract):
   * upstream origin is fixed by server config; callers cannot choose arbitrary hosts
@@ -310,6 +310,38 @@ class AgentGuardClient:
         return self.request("GET", f"/v1/runs/{_quote(run_id)}/timeline")
 
     # ------------------------------------------------------------------ #
+    # D-round capabilities (published at pinned commit 3c34931 / 1.1.0rc1)
+    # ------------------------------------------------------------------ #
+    def get_readiness(self) -> dict[str, Any]:
+        """Layered readiness checks (agentguard_api / warden_connectivity /
+        contract_source / ...), each with status, source and blockers."""
+        return self.request("GET", "/v1/system/readiness")
+
+    def get_investigation_options(self) -> dict[str, Any]:
+        """Real resource discovery: per-audit-mode submittable flag and
+        blockers[] - the create form renders these verbatim."""
+        return self.request("GET", "/v1/investigations/options")
+
+    def get_investigation_timeline(self, request_id: str) -> dict[str, Any]:
+        """Persisted investigation timeline (D7 published the request_id form)."""
+        return self.request("GET", f"/v1/investigations/{_quote(request_id)}/timeline")
+
+    def list_reports(self, *, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        return self.request("GET", "/v1/reports", query={"limit": limit, "offset": offset})
+
+    def get_run_findings(self, run_id: str) -> dict[str, Any]:
+        """E1 risk findings linked to a WARDEN run."""
+        return self.request("GET", f"/v1/runs/{_quote(run_id)}/findings")
+
+    def get_run_hypotheses(self, run_id: str) -> dict[str, Any]:
+        """E1 falsifiable hypotheses for a WARDEN run."""
+        return self.request("GET", f"/v1/runs/{_quote(run_id)}/hypotheses")
+
+    def get_run_investigation(self, run_id: str) -> dict[str, Any]:
+        """D3 multi-round investigation journal (rounds, decisions, budget)."""
+        return self.request("GET", f"/v1/runs/{_quote(run_id)}/investigation")
+
+    # ------------------------------------------------------------------ #
     # capability discovery
     # ------------------------------------------------------------------ #
     def discover_operations(self) -> dict[str, bool]:
@@ -323,10 +355,13 @@ class AgentGuardClient:
             return self._discovered
         tracked = [
             "GET /v1/investigations/{request_id}/interaction-graph",
+            "GET /v1/investigations/{request_id}/timeline",
             "GET /v1/experiments",
             "GET /v1/experiments/{experiment_id}",
             "POST /v1/experiments/compare",
-            "GET /v1/runs/{run_id}/timeline",
+            "GET /v1/runs/{run_id}/findings",
+            "GET /v1/runs/{run_id}/hypotheses",
+            "GET /v1/runs/{run_id}/investigation",
             "GET /v1/system/readiness",
             "GET /v1/investigations/options",
             "GET /v1/reports",

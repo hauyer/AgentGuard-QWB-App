@@ -147,7 +147,7 @@ def test_timeline_uses_upstream_events_when_run_exists(stub_base_url: str) -> No
     assert payload["meta"]["timeline_source"] == "upstream"
     assert payload["meta"]["run_id"] == "run-stub-0001"
     steps = {event["step"] for event in payload["events"]}
-    assert "plan_submitted" in steps and "run_started" in steps
+    assert "plan_submitted" in steps and "workflow_created" in steps
 
 
 def test_timeline_derived_when_upstream_has_no_run_timeline(stub_base_url: str) -> None:
