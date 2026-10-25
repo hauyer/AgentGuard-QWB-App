@@ -68,7 +68,9 @@ class ProjectInvestigation(Base):
     """Reference from a project to an AgentGuard-stored investigation (B12).
 
     Only the reference and business metadata live here; run state stays
-    authoritative in AgentGuard and is never duplicated.
+    authoritative in AgentGuard and is never duplicated. `last_known_run_id`
+    (B19) is the authorization bridge for run_id-addressed resources (reports):
+    it is refreshed on authorized investigation reads.
     """
 
     __tablename__ = "project_investigations"
@@ -82,6 +84,7 @@ class ProjectInvestigation(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     # whether the BFF verified the request_id exists upstream at link time
     verification: Mapped[str] = mapped_column(String(16), default="unverified")
+    last_known_run_id: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

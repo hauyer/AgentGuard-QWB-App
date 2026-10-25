@@ -1,4 +1,4 @@
-"""Investigation workflow routes (B3)."""
+"""Investigation workflow routes (B3, project-scoped since B19)."""
 
 from __future__ import annotations
 
@@ -6,10 +6,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
+from pydantic import Field
 
 from app.api.deps import require_role, require_role_csrf
 from app.integrations.agentguard_client import AgentGuardClient
 from app.schemas.investigations import CreateInvestigationRequest
+from app.services import resource_access
 from app.services.investigations_service import (
     InvestigationServiceError,
     create_investigation,
@@ -36,11 +38,17 @@ def _mode_override(request: Request) -> str | None:
     return request.app.state.settings.app_data_mode or None
 
 
+class CreateBody(CreateInvestigationRequest):
+    """B19: live creations must target a project the caller can operate on."""
+
+    project_id: int | None = Field(default=None, ge=1)
+
+
 @router.get("/investigations")
 def investigations_list(
     request: Request,
     client: AgentGuardClientDep,
-    _user: Viewer,
+    user: Viewer,
     status: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
@@ -53,6 +61,8 @@ def investigations_list(
             status=status,
             limit=limit,
             offset=offset,
+            settings=request.app.state.settings,
+            user=user,
         )
     except InvestigationServiceError as exc:
         return _error_response(exc)
@@ -62,7 +72,7 @@ def investigations_list(
 @router.post("/investigations", status_code=201)
 def investigations_create(
     request: Request,
-    body: CreateInvestigationRequest,
+    body: CreateBody,
     client: AgentGuardClientDep,
     user: AnalystCsrf,
 ) -> dict:
@@ -73,6 +83,8 @@ def investigations_create(
             mode_override=_mode_override(request),
             request=body,
             settings=request.app.state.settings,
+            user=user,
+            project_id=body.project_id,
         )
     except InvestigationServiceError as exc:
         return _error_response(exc)
@@ -81,7 +93,9 @@ def investigations_create(
         role=user.role,
         action="investigation.create",
         target=payload.get("request_id"),
-        detail=f"mode={payload.get('mode', body.mode)} data_mode={meta.get('data_mode')}",
+        project_id=body.project_id,
+        detail=f"mode={payload.get('mode', body.mode)} data_mode={meta.get('data_mode')} "
+               f"link_pending={meta.get('link_pending', False)}",
     )
     return {"meta": meta, "created": payload}
 
@@ -91,15 +105,28 @@ def investigations_detail(
     request: Request,
     request_id: str,
     client: AgentGuardClientDep,
-    _user: Viewer,
+    user: Viewer,
 ) -> dict:
     try:
+        grant = resource_access.require_investigation_access(
+            request.app.state.settings, client, user, request_id,
+            mode_override=_mode_override(request))
         payload, meta = get_investigation(
             client, request.app.state.demo_service, mode_override=_mode_override(request), request_id=request_id
         )
+    except resource_access.AccessDenied as exc:
+        return _error_response(exc)
     except InvestigationServiceError as exc:
         return _error_response(exc)
-    return {"meta": meta, "investigation": payload}
+    if grant.is_global_admin and not grant.project_ids:
+        # Unlinked live object: explicit admin bypass, always audited.
+        request.app.state.audit_service.record(
+            actor=user.username, role=user.role, action="resource.admin_access",
+            target=request_id, detail="investigation.detail (unlinked)")
+    if grant.data_mode.value == "live":
+        resource_access.refresh_run_bridge(
+            request.app.state.settings, request_id, payload.get("run_id"))
+    return {"meta": {**meta, "project_ids": list(grant.project_ids)}, "investigation": payload}
 
 
 @router.get("/investigations/{request_id}/timeline")
@@ -107,15 +134,27 @@ def investigations_timeline(
     request: Request,
     request_id: str,
     client: AgentGuardClientDep,
-    _user: Viewer,
+    user: Viewer,
 ) -> dict:
     try:
+        grant = resource_access.require_investigation_access(
+            request.app.state.settings, client, user, request_id,
+            mode_override=_mode_override(request))
         payload, meta = get_timeline(
             client, request.app.state.demo_service, mode_override=_mode_override(request), request_id=request_id
         )
+    except resource_access.AccessDenied as exc:
+        return _error_response(exc)
     except InvestigationServiceError as exc:
         return _error_response(exc)
-    return {"meta": meta, "events": payload}
+    if grant.is_global_admin and not grant.project_ids:
+        request.app.state.audit_service.record(
+            actor=user.username, role=user.role, action="resource.admin_access",
+            target=request_id, detail="investigation.timeline (unlinked)")
+    if grant.data_mode.value == "live":
+        resource_access.refresh_run_bridge(
+            request.app.state.settings, request_id, meta.get("run_id"))
+    return {"meta": {**meta, "project_ids": list(grant.project_ids)}, "events": payload}
 
 
 @router.get("/scenarios")
@@ -131,8 +170,9 @@ def scenarios_list(
     return {"meta": meta, **payload}
 
 
-def _error_response(exc: InvestigationServiceError) -> JSONResponse:
+def _error_response(exc) -> JSONResponse:
     detail = {"error": exc.code, "message": str(exc)}
-    if exc.request_id:
-        detail["request_id"] = exc.request_id
+    request_id = getattr(exc, "request_id", None)
+    if request_id:
+        detail["request_id"] = request_id
     return JSONResponse(status_code=exc.status_code, content={"detail": detail})

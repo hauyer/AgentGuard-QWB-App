@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { useAuthStore } from "../stores/auth-store";
 import { useCreateInvestigation, useScenarios } from "../hooks/use-investigations";
+import { useProjects } from "../hooks/use-projects";
 import { useSystemStatus } from "../hooks/use-system-status";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -61,6 +62,12 @@ export function CreateInvestigationPage() {
   const probeAvailable = Boolean(capabilities?.capabilities["probe_rest"] ?? capabilities?.capabilities["probe"]);
   const saeAvailable = Boolean(capabilities?.capabilities["sae_rest"] ?? capabilities?.capabilities["sae"]);
 
+  // B19: live creations must target a project; demo modes may submit without one.
+  const dataMode = system.data?.data_mode;
+  const projects = useProjects(50, 0);
+  const activeProjects = (projects.data?.items ?? []).filter((project) => project.status === "active");
+  const projectRequired = dataMode === "live" || dataMode === undefined;
+
   const set = <K extends keyof CreateInvestigationRequest>(key: K, value: CreateInvestigationRequest[K]) =>
     setForm((previous) => ({ ...previous, [key]: value }));
 
@@ -76,7 +83,8 @@ export function CreateInvestigationPage() {
     form.runtime_id.trim() !== "" &&
     form.capture_targets.length > 0 &&
     form.capture_targets.every((target) => target.target_id.trim() !== "") &&
-    metadataError === null;
+    metadataError === null &&
+    (!projectRequired || form.project_id != null);
 
   const handleSubmit = () => {
     if (!canSubmit || create.isPending) return;
@@ -146,6 +154,26 @@ export function CreateInvestigationPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card title="威胁契约">
               <div className="space-y-3">
+                <label className="block text-xs font-medium text-slate-500">
+                  归属项目（project_id）{projectRequired && <span className="text-red-600">*</span>}
+                  <select
+                    className={INPUT}
+                    value={form.project_id ?? ""}
+                    onChange={(event) => set("project_id", event.target.value ? Number(event.target.value) : null)}
+                  >
+                    <option value="">选择项目…</option>
+                    {activeProjects.map((project) => (
+                      <option key={project.project_id} value={project.project_id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-[11px] text-slate-400">
+                    {dataMode === "live"
+                      ? "Live 调查必须归属项目（服务端校验成员权限并审计）"
+                      : "演示模式可不选；调查记录进入演示命名空间"}
+                  </span>
+                </label>
                 <label className="block text-xs font-medium text-slate-500">
                   威胁契约 ID（contract_id）
                   <input

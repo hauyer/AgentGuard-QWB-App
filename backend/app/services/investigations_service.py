@@ -47,6 +47,20 @@ def _mode_for(settings, agentguard_available: bool) -> DataMode:
     return effective_data_mode(settings.app_data_mode or None, agentguard_available)
 
 
+def _link(settings, project_id: int | None, request_id: str, user) -> bool:
+    """Persist the project link after a successful submission. A failed link is
+    logged and reported via link_pending - never a second upstream submission."""
+    if project_id is None:
+        return True  # demo namespace or unlinked (should not happen in live)
+    from app.services.resource_access import link_investigation_after_creation
+
+    persisted = link_investigation_after_creation(settings, project_id, request_id, user.username)
+    if not persisted:
+        logger.error("project link persistence failed for %s (project %s); link_pending",
+                     request_id, project_id)
+    return persisted
+
+
 def list_investigations(
     client: AgentGuardClient,
     demo: DemoService,
@@ -55,14 +69,51 @@ def list_investigations(
     status: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    settings=None,
+    user=None,
 ) -> tuple[dict, dict]:
     mode = effective_data_mode(mode_override, _agentguard_reachable(client))
     if mode == DataMode.LIVE:
-        try:
-            payload = client.list_investigations(status=status, limit=limit, offset=offset)
-        except AgentGuardError as exc:
-            raise _to_service_error(exc) from exc
-        return payload, {"data_mode": "live"}
+        # B19: live investigations are project-scoped. The list is the caller's
+        # locally-linked set (paged with correct semantics), never the upstream
+        # global listing.
+        if settings is None or user is None:
+            raise InvestigationServiceError(503, "AUTH_STORAGE_UNAVAILABLE", "授权存储不可用")
+        from sqlalchemy import func, select
+
+        from app.core.db import open_session
+        from app.models.app import ProjectInvestigation, ProjectMember
+
+        session = open_session(settings)
+        if session is None:
+            raise InvestigationServiceError(503, "AUTH_STORAGE_UNAVAILABLE", "授权存储不可用")
+        with session:
+            member_projects = select(ProjectMember.project_id).where(
+                ProjectMember.username == user.username)
+            conditions = [ProjectInvestigation.project_id.in_(member_projects)]
+            total = session.scalar(
+                select(func.count()).select_from(ProjectInvestigation).where(*conditions))
+            rows = session.scalars(
+                select(ProjectInvestigation)
+                .where(*conditions)
+                .order_by(ProjectInvestigation.created_at.desc(), ProjectInvestigation.id.desc())
+                .limit(limit)
+                .offset(offset)
+            ).all()
+            items = [
+                {
+                    "request_id": row.agentguard_request_id,
+                    "project_id": row.project_id,
+                    "display_name": row.display_name,
+                    "verification": row.verification,
+                    "last_known_run_id": row.last_known_run_id,
+                    "linked_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                for row in rows
+            ]
+        return ({"items": items, "count": len(items), "offset": offset, "limit": limit,
+                 "total": int(total or 0)},
+                {"data_mode": "live", "source": "local_project_index"})
     if mode in (DataMode.RECORDED, DataMode.SYNTHETIC):
         payload = demo.list_investigations(status=status, limit=limit, offset=offset)
         return payload, demo.meta_for("investigations.json")
@@ -78,10 +129,25 @@ def create_investigation(
     mode_override: str | None,
     request: CreateInvestigationRequest,
     settings=None,
+    user=None,
+    project_id: int | None = None,
 ) -> tuple[dict, dict]:
     mode = effective_data_mode(mode_override, _agentguard_reachable(client))
     request_id = f"inv-{uuid.uuid4().hex[:16]}"
     if mode == DataMode.LIVE:
+        # B19: live creations must belong to a project the caller can operate on.
+        if settings is None or user is None:
+            raise InvestigationServiceError(503, "AUTH_STORAGE_UNAVAILABLE", "授权存储不可用")
+        if project_id is None:
+            raise InvestigationServiceError(
+                422, "PROJECT_REQUIRED",
+                "Live 模式创建调查必须指定 project_id（调查将归属到该项目并在本地持久化引用）")
+        from app.services.project_service import ProjectServiceError, require_project_access
+
+        try:
+            require_project_access(settings, user, project_id, required_role="analyst")
+        except ProjectServiceError as exc:
+            raise InvestigationServiceError(exc.status_code, exc.code, str(exc)) from exc
         # The audit timeout must fit inside the HTTP budget, otherwise the BFF
         # would disconnect while the upstream run is still executing.
         if (
@@ -108,8 +174,11 @@ def create_investigation(
                 detail = dict(detail)
                 detail.setdefault("request_id", request_id)
                 detail["recovered_after_timeout"] = True
-                logger.warning("investigation %s reconciled after upstream timeout (found)", request_id)
-                return detail, {"data_mode": "live", "recovered_after_timeout": True}
+                link_pending = not _link(settings, project_id, request_id, user)
+                logger.warning("investigation %s reconciled after upstream timeout (found, link_pending=%s)",
+                               request_id, link_pending)
+                return detail, {"data_mode": "live", "recovered_after_timeout": True,
+                                "link_pending": link_pending}
             if outcome == "absent":
                 # Confirmed absent upstream: the original submission never
                 # landed, so the client may safely retry with a new request.
@@ -130,7 +199,10 @@ def create_investigation(
             raise _to_service_error(exc) from exc
         payload = dict(payload)
         payload.setdefault("request_id", request_id)
-        return payload, {"data_mode": "live"}
+        # Reliable local link; failure is surfaced as link_pending (audited by
+        # the route) instead of a blind second submission.
+        link_pending = not _link(settings, project_id, request_id, user)
+        return payload, {"data_mode": "live", "link_pending": link_pending}
     if mode in (DataMode.RECORDED, DataMode.SYNTHETIC):
         created = demo.record_demo_investigation(
             request_id,

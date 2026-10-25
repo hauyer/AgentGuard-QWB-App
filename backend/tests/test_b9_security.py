@@ -411,7 +411,39 @@ class _UnusedDemo:
     """LIVE-only service paths never touch the demo service."""
 
 
-def test_wait_for_completion_timeout_budget_enforced() -> None:
+@pytest.fixture()
+def b19_service_env(tmp_path: Path):
+    """DB-backed settings + project-admin user for service-level creation tests."""
+    from sqlalchemy.orm import Session
+
+    from app.core.db import dispose_engine, get_engine, upgrade_database
+    from app.core.passwords import hash_password
+    from app.models.app import Project, ProjectMember, User
+    from app.services.auth_service import AppUser
+
+    settings = make_settings(
+        auth_enabled=True,
+        app_secret_key=STRONG_KEY,
+        database_url=f"sqlite:///{(tmp_path / 'b9svc.db').as_posix()}",
+    )
+    upgrade_database(settings)
+    with Session(get_engine(settings)) as session:
+        session.add(User(username="alice", role="admin", display_name="a",
+                         password_hash=hash_password("pw-1234567890")))
+        project = Project(name="p", description=None, status="active", created_by="alice")
+        session.add(project)
+        session.flush()
+        session.add(ProjectMember(project_id=project.id, username="alice", role="admin", added_by="alice"))
+        session.commit()
+        project_id = project.id
+    user = AppUser(username="alice", display_name="a", role="admin", source="database")
+    yield settings, user, project_id
+    dispose_engine(settings)
+
+
+def test_wait_for_completion_timeout_budget_enforced(b19_service_env) -> None:
+    settings, user, project_id = b19_service_env
+
     class _HealthyClient:
         def health(self) -> dict:
             return {"status": "ok"}
@@ -419,7 +451,6 @@ def test_wait_for_completion_timeout_budget_enforced() -> None:
         def create_investigation(self, payload, *, request_id=None) -> dict:  # pragma: no cover
             raise AssertionError("budget check must fire before any submission")
 
-    settings = make_settings(agentguard_api_timeout=15.0)
     request = CreateInvestigationRequest(
         contract_id="ct-1",
         model_id="m",
@@ -435,6 +466,8 @@ def test_wait_for_completion_timeout_budget_enforced() -> None:
             mode_override=None,
             request=request,
             settings=settings,
+            user=user,
+            project_id=project_id,
         )
     assert excinfo.value.code == "TIMEOUT_BUDGET_INVALID"
 
@@ -463,25 +496,29 @@ class _TimeoutPostClient:
         return dict(self._get_result or {})
 
 
-def test_submission_reconciliation_found() -> None:
+def test_submission_reconciliation_found(b19_service_env) -> None:
     """POST is network-ambiguous, but GET finds the investigation upstream:
-    return the real record; never resubmit."""
+    return the real record; never resubmit. The local project link persists."""
+    settings, user, project_id = b19_service_env
     client = _TimeoutPostClient(get_result={"request_id": "inv-x", "status": "running"})
     request = CreateInvestigationRequest(contract_id="ct-1", model_id="m", runtime_id="rt")
     payload, meta = create_investigation(
-        client, _UnusedDemo(), mode_override=None, request=request, settings=make_settings()
+        client, _UnusedDemo(), mode_override=None, request=request,
+        settings=settings, user=user, project_id=project_id,
     )
     assert payload["request_id"] == "inv-x"
     assert payload["recovered_after_timeout"] is True
     assert meta["recovered_after_timeout"] is True
+    assert meta["link_pending"] is False
     assert client.post_count == 1
 
 
-def test_submission_reconciliation_absent_is_retryable() -> None:
+def test_submission_reconciliation_absent_is_retryable(b19_service_env) -> None:
     """Upstream conclusively reports 404 for the request_id: the submission
     never landed, so the caller may safely retry with a new request."""
     from app.integrations.agentguard_client import AgentGuardError
 
+    settings, user, project_id = b19_service_env
     client = _TimeoutPostClient(
         get_result=None,
         get_error=AgentGuardError(404, "NOT_FOUND", "unknown workflow"),
@@ -489,17 +526,19 @@ def test_submission_reconciliation_absent_is_retryable() -> None:
     request = CreateInvestigationRequest(contract_id="ct-1", model_id="m", runtime_id="rt")
     with pytest.raises(InvestigationServiceError) as excinfo:
         create_investigation(
-            client, _UnusedDemo(), mode_override=None, request=request, settings=make_settings()
+            client, _UnusedDemo(), mode_override=None, request=request,
+            settings=settings, user=user, project_id=project_id,
         )
     assert excinfo.value.code == "SUBMISSION_NOT_RECORDED"
     assert client.post_count == 1
 
 
-def test_submission_reconciliation_unknown_stays_ambiguous() -> None:
+def test_submission_reconciliation_unknown_stays_ambiguous(b19_service_env) -> None:
     """Reconciliation itself fails: the outcome must stay ambiguous instead of
     guessing, and nothing may be resubmitted."""
     from app.integrations.agentguard_client import AgentGuardError
 
+    settings, user, project_id = b19_service_env
     client = _TimeoutPostClient(
         get_result=None,
         get_error=AgentGuardError(0, "API_UNREACHABLE", "AgentGuard API request failed"),
@@ -507,7 +546,8 @@ def test_submission_reconciliation_unknown_stays_ambiguous() -> None:
     request = CreateInvestigationRequest(contract_id="ct-1", model_id="m", runtime_id="rt")
     with pytest.raises(InvestigationServiceError) as excinfo:
         create_investigation(
-            client, _UnusedDemo(), mode_override=None, request=request, settings=make_settings()
+            client, _UnusedDemo(), mode_override=None, request=request,
+            settings=settings, user=user, project_id=project_id,
         )
     assert excinfo.value.code == "SUBMISSION_AMBIGUOUS"
     assert client.post_count == 1

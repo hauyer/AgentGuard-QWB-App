@@ -30,6 +30,8 @@ export interface CreateInvestigationRequest {
   wait_for_completion: boolean;
   timeout_seconds: number;
   poll_interval_seconds: number;
+  /** B19: live creations must belong to a project the caller can operate on. */
+  project_id?: number | null;
 }
 
 export type InvestigationStatus = "pending" | "planned" | "running" | "completed" | "blocked" | "failed";

@@ -67,12 +67,16 @@ def test_list_investigations_demo_filter_and_pagination() -> None:
     assert payload["total"] == 2
 
 
-def test_list_investigations_live_with_stub(stub_base_url_warden_available: str) -> None:
-    client = _client(stub_base_url_warden_available)
+def test_list_investigations_live_is_project_scoped(live_project_env) -> None:
+    client, _settings, login = live_project_env
+    login()
     response = client.get("/api/investigations")
     assert response.status_code == 200
     payload = response.json()
     assert payload["meta"]["data_mode"] == "live"
+    assert payload["meta"]["source"] == "local_project_index"
+    ids = [item["request_id"] for item in payload["items"]]
+    assert ids == ["inv-stub-0001"]  # only the project-linked investigation
 
 
 def test_list_investigations_unavailable() -> None:
@@ -102,20 +106,68 @@ def test_create_investigation_demo_records_without_pretending() -> None:
     assert all(event["status"] == "pending" for event in events[1:])
 
 
-def test_create_investigation_live_with_warden(stub_base_url_warden_available: str) -> None:
-    client = _client(stub_base_url_warden_available)
-    response = client.post("/api/investigations", json=VALID_BODY)
+def test_create_investigation_live_with_warden(live_project_env) -> None:
+    client, _settings, login = live_project_env
+    login()
+    response = client.post("/api/investigations", json={**VALID_BODY, "project_id": 1},
+                           headers={"X-CSRF-Token": client.cookies.get("qwb_csrf", "")})
     assert response.status_code == 201
     created = response.json()["created"]
     assert created["status"] == "planned"
     assert created["plan"]["plan_id"]
+    assert response.json()["meta"]["link_pending"] is False
+    # the new investigation is immediately listed under the project
+    listed = client.get("/api/investigations").json()
+    assert created["request_id"] in [item["request_id"] for item in listed["items"]]
 
 
-def test_create_investigation_warden_not_configured(stub_base_url: str) -> None:
-    client = _client(stub_base_url)
-    response = client.post("/api/investigations", json=VALID_BODY)
+def test_create_investigation_live_requires_project(live_project_env) -> None:
+    client, _settings, login = live_project_env
+    login()
+    response = client.post("/api/investigations", json=VALID_BODY,
+                           headers={"X-CSRF-Token": client.cookies.get("qwb_csrf", "")})
+    assert response.status_code == 422
+    assert response.json()["detail"]["error"] == "PROJECT_REQUIRED"
+
+
+def test_create_investigation_warden_not_configured(stub_base_url: str, tmp_path) -> None:
+    """Kernel missing is a real upstream condition; the project gate runs first."""
+    from sqlalchemy.orm import Session
+
+    from app.core.db import dispose_engine, get_engine, upgrade_database
+    from app.core.passwords import hash_password
+    from app.models.app import Project, ProjectMember, User
+
+    settings = make_settings(
+        auth_enabled=True, app_secret_key="b19-secret-key-0123456789abcdef",
+        database_url=f"sqlite:///{(tmp_path / 'wnc.db').as_posix()}")
+    upgrade_database(settings)
+    with Session(get_engine(settings)) as session:
+        session.add(User(username="alice", role="admin", display_name="a",
+                         password_hash=hash_password("alice-pw-12345")))
+        project = Project(name="p", description=None, status="active", created_by="alice")
+        session.add(project)
+        session.flush()
+        session.add(ProjectMember(project_id=project.id, username="alice", role="admin", added_by="alice"))
+        session.commit()
+        project_id = project.id
+
+    app = create_app()
+    client = TestClient(app)
+    client.__enter__()
+    app.state.settings = make_settings(agentguard_base_url=stub_base_url, **settings.model_dump(include={
+        "auth_enabled", "app_secret_key", "database_url"}))
+    from app.services.audit_service import AuditService
+    app.state.agentguard_client = AgentGuardClient(app.state.settings)
+    app.state.audit_service = AuditService(app.state.settings)
+    _open_clients.append(client)
+
+    client.post("/api/auth/login", json={"username": "alice", "password": "alice-pw-12345"})
+    response = client.post("/api/investigations", json={**VALID_BODY, "project_id": project_id},
+                           headers={"X-CSRF-Token": client.cookies.get("qwb_csrf", "")})
     assert response.status_code == 503
     assert response.json()["detail"]["error"] == "WARDEN_NOT_CONFIGURED"
+    dispose_engine(settings)
 
 
 @pytest.mark.parametrize(
@@ -155,12 +207,24 @@ def test_timeline_demo_recorded_events() -> None:
     assert any(event["status"] == "running" for event in running_events)
 
 
-def test_timeline_live_derivation_is_honest(stub_base_url_warden_available: str) -> None:
-    client = _client(stub_base_url_warden_available)
-    events = client.get("/api/investigations/inv-stub-0001/timeline").json()["events"]
-    # stub detail is completed: final step completed, no fabricated steps
-    assert events[-1]["status"] == "completed"
+def test_timeline_live_is_project_scoped_and_honest(live_project_env) -> None:
+    client, _settings, login = live_project_env
+    login()
+    payload = client.get("/api/investigations/inv-stub-0001/timeline").json()
+    events = payload["events"]
+    # B13: persisted upstream events take precedence and are labelled as such
+    assert payload["meta"]["timeline_source"] == "upstream"
     assert all(event["status"] in {"completed", "pending", "running"} for event in events)
+
+
+def test_timeline_live_unlinked_admin_bypass_audited(live_project_env) -> None:
+    """Global admin may read an unlinked live object, and the bypass is audited."""
+    client, _settings, login = live_project_env
+    login()
+    response = client.get("/api/investigations/inv-stub-graph-0002/timeline")
+    assert response.status_code == 200
+    audit = client.get("/api/audit/events").json()
+    assert any(event["action"] == "resource.admin_access" for event in audit["items"])
 
 
 def test_scenarios_demo() -> None:
