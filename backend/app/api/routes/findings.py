@@ -98,6 +98,70 @@ def run_investigation(request: Request, run_id: str, user: Viewer) -> dict:
     )
 
 
+# ------------------------------------------------------------------ #
+# E6 investigation loop read-only routes (B28)
+# ------------------------------------------------------------------ #
+@router.get("/investigation-loops/{loop_id}")
+def loop_detail(request: Request, loop_id: str, user: Viewer) -> dict:
+    """Read a single investigation loop. Authorization: local loop_id → project map."""
+    try:
+        resource_access.require_loop_access(
+            request.app.state.settings, _client(request), user, loop_id, mode_override=_mode_override(request))
+        payload = _client(request).get_investigation_loop(loop_id)
+    except resource_access.AccessDenied as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
+    except AgentGuardError as exc:
+        return JSONResponse(
+            status_code=exc.status_code or 502,
+            content={"detail": {"error": exc.code, "message": str(exc)}})
+    return {"meta": {"data_mode": "live"}, **payload}
+
+
+@router.get("/investigation-loops/{loop_id}/decisions")
+def loop_decisions(request: Request, loop_id: str, user: Viewer) -> dict:
+    try:
+        resource_access.require_loop_access(
+            request.app.state.settings, _client(request), user, loop_id, mode_override=_mode_override(request))
+        payload = _client(request).get_investigation_decisions(loop_id)
+    except resource_access.AccessDenied as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
+    except AgentGuardError as exc:
+        return JSONResponse(
+            status_code=exc.status_code or 502,
+            content={"detail": {"error": exc.code, "message": str(exc)}})
+    return {"meta": {"data_mode": "live"}, **payload}
+
+
+@router.get("/investigation-loops/{loop_id}/evidence-changes")
+def loop_evidence_changes(request: Request, loop_id: str, user: Viewer) -> dict:
+    try:
+        resource_access.require_loop_access(
+            request.app.state.settings, _client(request), user, loop_id, mode_override=_mode_override(request))
+        payload = _client(request).get_investigation_evidence_changes(loop_id)
+    except resource_access.AccessDenied as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
+    except AgentGuardError as exc:
+        return JSONResponse(
+            status_code=exc.status_code or 502,
+            content={"detail": {"error": exc.code, "message": str(exc)}})
+    return {"meta": {"data_mode": "live"}, **payload}
+
+
+@router.get("/investigation-loops/{loop_id}/budget")
+def loop_budget(request: Request, loop_id: str, user: Viewer) -> dict:
+    try:
+        resource_access.require_loop_access(
+            request.app.state.settings, _client(request), user, loop_id, mode_override=_mode_override(request))
+        payload = _client(request).get_investigation_loop_budget(loop_id)
+    except resource_access.AccessDenied as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
+    except AgentGuardError as exc:
+        return JSONResponse(
+            status_code=exc.status_code or 502,
+            content={"detail": {"error": exc.code, "message": str(exc)}})
+    return {"meta": {"data_mode": "live"}, **payload}
+
+
 def _agentguard_reachable(request: Request) -> bool:
     try:
         _client(request).health()

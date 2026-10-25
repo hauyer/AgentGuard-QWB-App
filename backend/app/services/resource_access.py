@@ -23,7 +23,7 @@ from app.core.config import Settings
 from app.core.data_mode import DataMode, effective_data_mode
 from app.core.db import open_session
 from app.integrations.agentguard_client import AgentGuardClient, AgentGuardError
-from app.models.app import Project, ProjectInvestigation, ProjectMember
+from app.models.app import Project, ProjectInvestigation, ProjectInvestigationLoop, ProjectMember
 from app.services.auth_service import AppUser
 
 
@@ -169,6 +169,45 @@ def require_admin_scope(user: AppUser, *, code: str, message: str) -> None:
     that cannot be attributed to projects: global admin only in live mode."""
     if user.role != "admin":
         raise AccessDenied(code, message, status_code=403)
+
+
+def require_loop_access(
+    settings: Settings,
+    client: AgentGuardClient,
+    user: AppUser,
+    loop_id: str,
+    *,
+    mode_override: str | None,
+) -> AccessGrant:
+    """loop_id-addressed resources (E6 loops). Authorization resolves through the
+    local loop→project mapping; unknown loop_ids are denied for non-admins."""
+    mode = effective_mode(settings, client, mode_override)
+    if mode is not DataMode.LIVE:
+        return AccessGrant(data_mode=mode, request_id="", project_ids=(),
+                           membership_role=None, is_global_admin=user.role == "admin")
+    is_admin = user.role == "admin"
+    session = open_session(settings)
+    if session is None:
+        if not is_admin:
+            raise AccessDenied("LOOP_NOT_ACCESSIBLE", "调查循环不存在或不可访问")
+        return AccessGrant(data_mode=mode, request_id="", project_ids=(),
+                           membership_role=None, is_global_admin=True)
+    with session:
+        rows = session.scalars(
+            select(ProjectInvestigationLoop).where(ProjectInvestigationLoop.loop_id == loop_id)
+        ).all()
+    if not rows:
+        if not is_admin:
+            raise AccessDenied("LOOP_NOT_ACCESSIBLE", "调查循环不存在或不可访问")
+        return AccessGrant(data_mode=mode, request_id="", project_ids=(),
+                           membership_role=None, is_global_admin=True)
+    project_ids = tuple(row.project_id for row in rows)
+    request_ids = tuple(row.base_request_id for row in rows)
+    role = _membership_role(settings, user, project_ids)
+    if role is None and not is_admin:
+        raise AccessDenied("LOOP_NOT_ACCESSIBLE", "调查循环不存在或不可访问")
+    return AccessGrant(data_mode=mode, request_id=request_ids[0] if request_ids else "",
+                       project_ids=project_ids, membership_role=role, is_global_admin=is_admin)
 
 
 def refresh_run_bridge(settings: Settings, request_id: str, run_id: str | None) -> None:
