@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useState } from "react";
 
 import { useInvestigation, useTimeline } from "../hooks/use-investigations";
+import { useInvestigationLoops } from "../hooks/use-investigation-loops";
 import { useGraph } from "../hooks/use-graph";
 import { useReport } from "../hooks/use-reports";
 import { useLinkInvestigationToProject, useProjects } from "../hooks/use-projects";
@@ -51,6 +52,7 @@ export function InvestigationWorkspacePage() {
   const graph = useGraph(requestId);
   const runId = detail.data?.investigation?.run_id ?? "";
   const report = useReport(runId);
+  const loops = useInvestigationLoops(requestId, detail.data?.meta.data_mode === "live");
 
   if (detail.isPending) {
     return <PageHeader title="调查工作区" description={`正在加载 ${requestId}…`} />;
@@ -109,6 +111,8 @@ export function InvestigationWorkspacePage() {
           {timelineMeta.timeline_source === "derived" ? " · 时间线=状态推导" : ""}
         </span>
       </div>
+
+      <InvestigationLoopsPanel requestId={requestId} dataMode={meta.data_mode} query={loops} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card
@@ -234,6 +238,82 @@ export function InvestigationWorkspacePage() {
 
       <ProjectLinkPanel requestId={requestId} />
     </div>
+  );
+}
+
+function InvestigationLoopsPanel({
+  requestId,
+  dataMode,
+  query,
+}: {
+  requestId: string;
+  dataMode: string;
+  query: ReturnType<typeof useInvestigationLoops>;
+}) {
+  if (dataMode !== "live") {
+    return (
+      <Card title="多轮调查循环" description={`数据源：${dataMode.toUpperCase()}`}>
+        <p className="text-xs text-slate-600">
+          当前基础调查来自 {dataMode.toUpperCase()} 数据源。只有 Live AgentGuard 列表可验证项目归属并开放真实 Loop 详情；此处不会回退到合成循环。
+        </p>
+      </Card>
+    );
+  }
+
+  const response = query.data;
+  const canOpenDetails = response?.meta.ownership_verified === true;
+  return (
+    <Card
+      title="多轮调查循环"
+      description={canOpenDetails ? "项目归属已由 AgentGuard Live 列表验证" : "Loop 列表由 AgentGuard Live 提供"}
+    >
+      <p className="mb-3 text-[11px] text-slate-500">
+        数据源：{response ? `LIVE · ${response.meta.source ?? "AgentGuard"}` : "LIVE · 正在确认上游来源"}
+      </p>
+      {query.isPending && <p className="text-xs text-slate-500">正在读取 Loop 列表…</p>}
+      {query.isError && (
+        <div className="flex items-center justify-between gap-3 text-xs text-red-700">
+          <span>{query.error instanceof Error ? query.error.message : "Loop 列表暂不可用"}</span>
+          <Button variant="secondary" onClick={() => void query.refetch()}>重试</Button>
+        </div>
+      )}
+      {response && !canOpenDetails && (
+        <p className="text-xs text-amber-700">服务端未确认 Loop 项目归属，详情入口已关闭。</p>
+      )}
+      {response && response.items.length === 0 && canOpenDetails && (
+        <p className="text-xs text-slate-500">该基础调查目前没有 AgentGuard Loop。</p>
+      )}
+      {response && response.items.length > 0 && (
+        <ul className="space-y-2">
+          {response.items.map((item) => (
+            <li key={item.loop_id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-surface-border p-3 text-xs">
+              <div className="space-y-1">
+                <p className="font-mono text-slate-800">{item.loop_id}</p>
+                <p className="text-slate-600">
+                  阶段：{item.phase ?? "未提供"} · 策略：{item.strategy ?? "未提供"} · 执行轮次：{item.rounds_executed ?? item.metrics?.rounds_executed ?? "未提供"}
+                </p>
+                {item.stop_reason && <p className="text-slate-500">停止原因：{item.stop_reason}</p>}
+                {item.created_at && <p className="text-[11px] text-slate-400">创建时间：{item.created_at}</p>}
+              </div>
+              {canOpenDetails ? (
+                <Link
+                  to={`/investigation-journal?loop_id=${encodeURIComponent(item.loop_id)}`}
+                  className="font-medium text-brand-700 hover:underline"
+                >
+                  查看多轮记录 →
+                </Link>
+              ) : (
+                <span className="text-slate-400">归属待验证</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!canOpenDetails && !query.isPending && !query.isError && !response && (
+        <p className="text-xs text-slate-500">尚无可验证的 Loop 列表。</p>
+      )}
+      <p className="mt-3 text-[11px] text-slate-400">基础调查：<span className="font-mono">{requestId}</span></p>
+    </Card>
   );
 }
 

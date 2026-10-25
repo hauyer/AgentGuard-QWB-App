@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import {
+  fetchInvestigationLoops,
   fetchInvestigationLoopSubmission,
   reconcileInvestigationLoopSubmission,
   submitInvestigationLoop,
@@ -12,6 +13,15 @@ import type {
 export function useCreateInvestigationLoop(requestId: string) {
   return useMutation({
     mutationFn: (body: CreateInvestigationLoopRequest) => submitInvestigationLoop(requestId, body),
+  });
+}
+
+export function useInvestigationLoops(requestId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["investigation-loops", requestId],
+    queryFn: ({ signal }) => fetchInvestigationLoops(requestId, signal),
+    enabled: enabled && requestId.length > 0,
+    staleTime: 15_000,
   });
 }
 

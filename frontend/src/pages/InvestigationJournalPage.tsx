@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
@@ -8,6 +9,7 @@ import { ErrorState } from "../components/ui/error-state";
 import { PageHeader } from "../components/shared/page-header";
 import { DemoBanner } from "../components/shared/demo-banner";
 import type { MetaInfo } from "../types/dashboard";
+import { apiGet } from "../services/api";
 
 // AgentGuard E2 官方合同类型
 // 对应上游: InvestigationLoopView / LoopDecisionView / LoopDecisionsResponse
@@ -70,27 +72,19 @@ interface LoopBudget {
 }
 
 async function fetchLoop(loopId: string, signal?: AbortSignal): Promise<{ meta: MetaInfo } & LoopDetail> {
-  const res = await fetch(`/api/investigation-loops/${encodeURIComponent(loopId)}`, { signal });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return apiGet<{ meta: MetaInfo } & LoopDetail>(`/investigation-loops/${encodeURIComponent(loopId)}`, signal);
 }
 
 async function fetchLoopDecisions(loopId: string, signal?: AbortSignal): Promise<{ meta: MetaInfo; items: LoopDecision[] }> {
-  const res = await fetch(`/api/investigation-loops/${encodeURIComponent(loopId)}/decisions`, { signal });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return apiGet<{ meta: MetaInfo; items: LoopDecision[] }>(`/investigation-loops/${encodeURIComponent(loopId)}/decisions`, signal);
 }
 
 async function fetchLoopEvidenceChanges(loopId: string, signal?: AbortSignal): Promise<{ meta: MetaInfo } & LoopEvidenceChangesResponse> {
-  const res = await fetch(`/api/investigation-loops/${encodeURIComponent(loopId)}/evidence-changes`, { signal });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return apiGet<{ meta: MetaInfo } & LoopEvidenceChangesResponse>(`/investigation-loops/${encodeURIComponent(loopId)}/evidence-changes`, signal);
 }
 
 async function fetchLoopBudget(loopId: string, signal?: AbortSignal): Promise<{ meta: MetaInfo } & LoopBudget> {
-  const res = await fetch(`/api/investigation-loops/${encodeURIComponent(loopId)}/budget`, { signal });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return apiGet<{ meta: MetaInfo } & LoopBudget>(`/investigation-loops/${encodeURIComponent(loopId)}/budget`, signal);
 }
 
 function phaseBadge(phase: LoopPhase) {
@@ -107,8 +101,8 @@ function phaseBadge(phase: LoopPhase) {
 
 export function InvestigationJournalPage() {
   const [searchParams] = useSearchParams();
-  const initialLoopId = searchParams.get("loop_id") ?? "";
-  const [loopId, setLoopId] = useState(initialLoopId);
+  const loopId = searchParams.get("loop_id") ?? "";
+  const [pollState, setPollState] = useState({ loopId: "", count: 0 });
 
   const loopQuery = useQuery({
     queryKey: ["loop", loopId],
@@ -135,28 +129,49 @@ export function InvestigationJournalPage() {
   });
 
   const loop = loopQuery.data;
+  const phase = String(loop?.phase ?? "").toUpperCase();
+  const pollCount = pollState.loopId === loopId ? pollState.count : 0;
+  const refetchLoop = loopQuery.refetch;
   const decisions = decisionsQuery.data?.items ?? [];
   const evidence = evidenceQuery.data;
   const budget = budgetQuery.data;
   const error = loopQuery.error || decisionsQuery.error || budgetQuery.error || evidenceQuery.error;
   const isLoading = loopQuery.isLoading || decisionsQuery.isLoading || budgetQuery.isLoading || evidenceQuery.isLoading;
 
+  useEffect(() => {
+    if (!loopId || !["CREATED", "RUNNING"].includes(phase) || pollCount >= 20) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void refetchLoop().finally(() => {
+        if (!cancelled) setPollState({ loopId, count: pollCount + 1 });
+      });
+    }, 3000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [loopId, phase, pollCount, refetchLoop]);
+
   return (
     <div className="space-y-4">
       <PageHeader
         title="多轮调查"
         description="AgentGuard E2 多轮自主调查记录。展示每轮动作选择、执行结果、证据变化与预算消耗。"
+        actions={
+          loop?.base_request_id ? (
+            <Link
+              to={`/investigations/${encodeURIComponent(loop.base_request_id)}/workspace`}
+              className="text-sm text-brand-700 hover:underline"
+            >
+              返回基础调查工作区
+            </Link>
+          ) : (
+            <Link to="/investigations" className="text-sm text-brand-700 hover:underline">
+              选择项目调查
+            </Link>
+          )
+        }
       />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs text-slate-500">Loop ID：</span>
-        <input
-          value={loopId}
-          onChange={(e) => setLoopId(e.target.value)}
-          placeholder="输入 loop_id"
-          className="rounded-md border border-surface-border px-2 py-1 text-xs font-mono"
-        />
-      </div>
 
       {isLoading && loopId && <p className="text-sm text-slate-400">正在加载多轮调查…</p>}
 
@@ -173,7 +188,10 @@ export function InvestigationJournalPage() {
       )}
 
       {!loopId && (
-        <p className="text-sm text-slate-400">请输入 loop_id 以查看多轮调查详情。</p>
+        <Card title="从项目调查进入多轮记录">
+          <p className="text-sm text-slate-600">打开一个项目关联的基础调查，在已验证的 Loop 列表中选择记录。页面不接受手动 loop_id 输入。</p>
+          <Link to="/projects" className="mt-2 inline-block text-sm text-brand-700 hover:underline">前往项目列表 →</Link>
+        </Card>
       )}
 
       {loop && (
@@ -182,6 +200,7 @@ export function InvestigationJournalPage() {
 
           <Card title="Loop 概况">
             <div className="flex flex-wrap items-center gap-4 text-xs">
+              <span className="text-slate-500">数据源：{String(loop.meta.data_mode).toUpperCase()}</span>
               <span className="text-slate-600">Loop ID：<span className="font-mono">{loop.loop_id}</span></span>
               <span className="text-slate-600">基础调查：<span className="font-mono">{loop.base_request_id}</span></span>
               <span className="text-slate-600">状态：
@@ -194,6 +213,15 @@ export function InvestigationJournalPage() {
               {loop.degradation && <span className="text-orange-600">降级：{loop.degradation}</span>}
             </div>
           </Card>
+
+          {!["CREATED", "RUNNING"].includes(phase) ? null : pollCount < 20 ? (
+            <p className="text-[11px] text-slate-400">Loop 运行中：每 3 秒检查一次，最多 20 次；离开页面会取消轮询。</p>
+          ) : (
+            <div className="flex items-center gap-2 text-[11px] text-slate-500">
+              <span>已停止自动轮询，可手动刷新。</span>
+              <button type="button" onClick={() => void refetchLoop()} className="text-brand-700 hover:underline">刷新状态</button>
+            </div>
+          )}
 
           {budget && (
             <Card title="预算消耗">

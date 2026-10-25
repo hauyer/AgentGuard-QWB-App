@@ -144,4 +144,89 @@ describe("InvestigationWorkspacePage", () => {
     expect(await screen.findByText(/GRAPH_SOURCE_UNAVAILABLE/)).toBeInTheDocument();
     expect(await screen.findByText("报告未包含风险发现（真实空集）。")).toBeInTheDocument();
   });
+
+  it("opens a verified Loop from the base investigation workspace", async () => {
+    const liveDetail = {
+      ...detailPayload,
+      meta: { data_mode: "live", project_ids: [7] },
+    };
+    mockFetch({
+      "/investigations/inv-stub-0001/loops": {
+        meta: { data_mode: "live", source: "agentguard", ownership_verified: true },
+        items: [{
+          loop_id: "loop-real-1",
+          base_request_id: "inv-stub-0001",
+          phase: "RUNNING",
+          strategy: "risk_score",
+          rounds_executed: 2,
+          stop_reason: null,
+          created_at: "2026-10-25T10:00:00Z",
+        }],
+        count: 1,
+      },
+      "/investigations/inv-stub-0001": liveDetail,
+      "/timeline": timelinePayload,
+      "/interaction-graph": graphPayload,
+      "/reports/run-stub-0001": reportPayload,
+    });
+    renderWithProviders(
+      <Routes>
+        <Route path="/investigations/:requestId/workspace" element={<InvestigationWorkspacePage />} />
+      </Routes>,
+      ["/investigations/inv-stub-0001/workspace"],
+    );
+
+    expect(await screen.findByText("loop-real-1")).toBeInTheDocument();
+    expect(screen.getByText(/执行轮次：2/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看多轮记录 →" })).toHaveAttribute(
+      "href",
+      "/investigation-journal?loop_id=loop-real-1",
+    );
+  });
+
+  it("does not request synthetic loop records", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/investigations/inv-stub-0001")) {
+        return new Response(JSON.stringify(detailPayload), { status: 200 });
+      }
+      if (url.includes("/timeline")) return new Response(JSON.stringify(timelinePayload), { status: 200 });
+      if (url.includes("/interaction-graph")) return new Response(JSON.stringify(graphPayload), { status: 200 });
+      if (url.includes("/reports/run-stub-0001")) return new Response(JSON.stringify(reportPayload), { status: 200 });
+      return new Response(JSON.stringify({ detail: { error: "NOT_FOUND", message: "missing" } }), { status: 404 });
+    });
+    renderWithProviders(
+      <Routes>
+        <Route path="/investigations/:requestId/workspace" element={<InvestigationWorkspacePage />} />
+      </Routes>,
+      ["/investigations/inv-stub-0001/workspace"],
+    );
+    expect(await screen.findByText(/只有 Live AgentGuard 列表可验证项目归属/)).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/loops"))).toBe(false);
+  });
+
+  it("keeps detail links closed when the Loop list lacks verified ownership", async () => {
+    const liveDetail = { ...detailPayload, meta: { data_mode: "live", project_ids: [7] } };
+    mockFetch({
+      "/investigations/inv-stub-0001/loops": {
+        meta: { data_mode: "live", source: "agentguard", ownership_verified: false },
+        items: [{ loop_id: "loop-unverified", base_request_id: "inv-stub-0001", phase: "RUNNING" }],
+        count: 1,
+      },
+      "/investigations/inv-stub-0001": liveDetail,
+      "/timeline": timelinePayload,
+      "/interaction-graph": graphPayload,
+      "/reports/run-stub-0001": reportPayload,
+    });
+    renderWithProviders(
+      <Routes>
+        <Route path="/investigations/:requestId/workspace" element={<InvestigationWorkspacePage />} />
+      </Routes>,
+      ["/investigations/inv-stub-0001/workspace"],
+    );
+
+    expect(await screen.findByText("loop-unverified")).toBeInTheDocument();
+    expect(screen.getByText("归属待验证")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "查看多轮记录 →" })).not.toBeInTheDocument();
+  });
 });

@@ -34,6 +34,25 @@ export interface InvestigationLoopSubmissionResponse {
   loop: Record<string, unknown> | null;
 }
 
+export interface InvestigationLoopListItem {
+  loop_id: string;
+  base_request_id: string;
+  phase?: string | null;
+  strategy?: string | null;
+  rounds_executed?: number | null;
+  metrics?: { rounds_executed?: number | null } | null;
+  stop_reason?: string | null;
+  created_at?: string | null;
+}
+
+export interface InvestigationLoopListResponse {
+  meta: MetaInfo & { source?: string; ownership_verified?: boolean };
+  items: InvestigationLoopListItem[];
+  count?: number;
+  offset?: number;
+  limit?: number;
+}
+
 export function fetchInvestigations(
   params: { status?: string; limit?: number; offset?: number },
   signal?: AbortSignal,
@@ -76,6 +95,16 @@ export function submitInvestigationLoop(
   return apiPost<InvestigationLoopSubmissionResponse>(
     `/investigations/${encodeURIComponent(requestId)}/loops`,
     body,
+  );
+}
+
+export function fetchInvestigationLoops(
+  requestId: string,
+  signal?: AbortSignal,
+): Promise<InvestigationLoopListResponse> {
+  return apiGet<InvestigationLoopListResponse>(
+    `/investigations/${encodeURIComponent(requestId)}/loops`,
+    signal,
   );
 }
 
