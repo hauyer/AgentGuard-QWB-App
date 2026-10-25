@@ -18,6 +18,7 @@ import { ProjectsPage } from "../pages/ProjectsPage";
 import { ReportsPage } from "../pages/ReportsPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { SystemOverviewPage } from "../pages/SystemOverviewPage";
+import { StrategyComparisonPage } from "../pages/StrategyComparisonPage";
 
 export const router = createBrowserRouter([
   {
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
       { path: "investigation-journal", element: <InvestigationJournalPage /> },
       { path: "defenses", element: <DefensePage /> },
       { path: "experiments", element: <ExperimentsPage /> },
+      { path: "strategy-comparison", element: <StrategyComparisonPage /> },
       { path: "experiences", element: <ExperiencesPage /> },
       { path: "reports", element: <ReportsPage /> },
       { path: "settings", element: <SettingsPage /> },

@@ -58,5 +58,75 @@
       "result_source": "recorded:run-qwb-0005",
       "created_at": "2026-10-19T15:26:30+08:00"
     }
-  ]
+  ],
+  "strategy_comparison": {
+    "scenario_id": "sc-qwb-001",
+    "model_version": "agent-suite-2.1",
+    "seed": 42,
+    "budget": { "max_actions": 5, "max_seconds": 120, "max_model_calls": 10 },
+    "sample_count": 1,
+    "uses_real_llm": true,
+    "is_real_observation": true,
+    "comparability_warnings": [
+      "只有一个真实基础场景",
+      "样本数为 1，统计显著性不足"
+    ],
+    "strategies": [
+      {
+        "strategy": "fixed_order",
+        "time_to_evidence": 45.2,
+        "evidence_count": 2,
+        "effective_action_ratio": 0.6,
+        "redundant_actions": 2,
+        "cost_usd": 0.85,
+        "degradation_rate": 0.0,
+        "budget_used": 3,
+        "stop_reason": "budget_exhausted"
+      },
+      {
+        "strategy": "risk_score",
+        "time_to_evidence": 28.7,
+        "evidence_count": 3,
+        "effective_action_ratio": 0.8,
+        "redundant_actions": 1,
+        "cost_usd": 0.92,
+        "degradation_rate": 0.0,
+        "budget_used": 2,
+        "stop_reason": "evidence_sufficient"
+      },
+      {
+        "strategy": "information_value",
+        "time_to_evidence": 35.1,
+        "evidence_count": 3,
+        "effective_action_ratio": 0.75,
+        "redundant_actions": 1,
+        "cost_usd": 1.05,
+        "degradation_rate": 0.1,
+        "budget_used": 3,
+        "stop_reason": "evidence_sufficient"
+      },
+      {
+        "strategy": "experience",
+        "time_to_evidence": 32.4,
+        "evidence_count": 2,
+        "effective_action_ratio": 0.7,
+        "redundant_actions": 2,
+        "cost_usd": 0.78,
+        "degradation_rate": 0.2,
+        "budget_used": 2,
+        "stop_reason": "evidence_sufficient"
+      },
+      {
+        "strategy": "llm",
+        "time_to_evidence": 22.3,
+        "evidence_count": 3,
+        "effective_action_ratio": 0.9,
+        "redundant_actions": 0,
+        "cost_usd": 1.45,
+        "degradation_rate": 0.0,
+        "budget_used": 2,
+        "stop_reason": "evidence_sufficient"
+      }
+    ]
+  }
 }

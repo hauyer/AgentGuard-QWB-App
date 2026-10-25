@@ -113,11 +113,11 @@
       "file": "experiments.json",
       "data_mode": "recorded",
       "source": "sanitised experiment comparison records",
-      "collected_at": "2026-10-24T04:55:35.681748+00:00",
-      "agentguard_version": "0.1.0-a7",
-      "agentguard_commit": "00d12bee352060ea6014eebea8400edd7c74a029",
+      "collected_at": "2026-10-25T09:00:00.000Z",
+      "agentguard_version": "1.1.0rc1",
+      "agentguard_commit": "3c34931f983b545c77ee79f866425eb63053807b",
       "sanitized": true,
-      "sha256": "55b57ba4fe61efaa2cab249429094343ce531741a33669914cbcb5cfc27442ff",
+      "sha256": "a674c66754a3b004bb05fd940c606c8a98c36a88e606021c3c48afc9669cf8d3",
       "capabilities": [
         "experiments.compare"
       ],
