@@ -96,7 +96,10 @@ class ProjectInvestigationLoop(Base):
     """
 
     __tablename__ = "project_investigation_loops"
-    __table_args__ = (UniqueConstraint("project_id", "loop_id", name="uq_project_loop"),)
+    __table_args__ = (
+        UniqueConstraint("project_id", "loop_id", name="uq_project_loop"),
+        UniqueConstraint("loop_id", name="uq_loop_id_unique"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
