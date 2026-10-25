@@ -1,186 +1,212 @@
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import ReactECharts from "echarts-for-react";
+import { useSearchParams } from "react-router-dom";
 
-import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 import { ErrorState } from "../components/ui/error-state";
 import { PageHeader } from "../components/shared/page-header";
-import { DemoBanner } from "../components/shared/demo-banner";
-import type { MetaInfo } from "../types/dashboard";
+import {
+  fetchStrategyEvaluation,
+  fetchStrategyEvaluations,
+  type StrategyEvaluation,
+  type StrategyEvaluationRun,
+} from "../services/research";
 
-interface StrategyMetric {
-  strategy: string;
-  time_to_evidence: number;
-  evidence_count: number;
-  effective_action_ratio: number;
-  redundant_actions: number;
-  cost_usd: number;
-  degradation_rate: number;
-  budget_used: number;
-  stop_reason: string;
+function value(value: number | string | null | undefined, digits = 2, suffix = ""): string {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : "未提供";
+  }
+  return typeof value === "string" && value.length > 0 ? value : "未提供";
 }
 
-interface StrategyComparison {
-  scenario_id: string;
-  model_version: string;
-  seed: number;
-  budget: { max_actions: number; max_seconds: number; max_model_calls: number };
-  sample_count: number;
-  uses_real_llm: boolean;
-  is_real_observation: boolean;
-  comparability_warnings: string[];
-  strategies: StrategyMetric[];
+function formatTimestamp(value: string | null | undefined): string {
+  if (!value) return "未提供";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-async function fetchStrategyComparison(signal?: AbortSignal): Promise<{ meta: MetaInfo } & StrategyComparison> {
-  const res = await fetch("/api/experiments/compare", { signal });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+function RunRow({ run }: { run: StrategyEvaluationRun }) {
+  return (
+    <tr className="border-b border-slate-100" data-testid="strategy-evaluation-run">
+      <td className="py-2 pr-3 font-mono">{run.strategy}</td>
+      <td className="py-2 pr-3">{run.repetition}</td>
+      <td className="py-2 pr-3">{run.execution_status}</td>
+      <td className="py-2 pr-3">{value(run.rounds_executed, 0)}</td>
+      <td className="py-2 pr-3">{value(run.steps_to_first_evidence, 0, " 步")}</td>
+      <td className="py-2 pr-3">{value(run.elapsed_seconds, 2, " 秒")}</td>
+      <td className="py-2 pr-3">{run.strategy_degraded ? "是" : "否"}</td>
+      <td className="py-2 pr-3">{value(run.stop_reason)}</td>
+    </tr>
+  );
+}
+
+function EvaluationView({ evaluation }: { evaluation: StrategyEvaluation }) {
+  return (
+    <div className="space-y-4" data-testid="strategy-evaluation-detail">
+      <Card title="评价信息">
+        <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div><dt className="text-slate-500">比较 ID</dt><dd className="break-all font-mono">{evaluation.comparison_id}</dd></div>
+          <div><dt className="text-slate-500">数据分区</dt><dd>{evaluation.data_partition}</dd></div>
+          <div><dt className="text-slate-500">源代码提交</dt><dd className="break-all font-mono">{value(evaluation.source_commit)}</dd></div>
+          <div><dt className="text-slate-500">执行时间</dt><dd>{formatTimestamp(evaluation.executed_at)}</dd></div>
+          <div><dt className="text-slate-500">案例数</dt><dd>{evaluation.base_request_ids.length}</dd></div>
+          <div><dt className="text-slate-500">重复次数</dt><dd>{value(evaluation.repetitions, 0)}</dd></div>
+          <div><dt className="text-slate-500">运行记录数</dt><dd>{evaluation.runs.length}</dd></div>
+          <div><dt className="text-slate-500">报告工件</dt><dd className="break-all font-mono">{value(evaluation.report_artifact_id)}</dd></div>
+        </dl>
+        <div className="mt-4">
+          <p className="mb-1 text-xs text-slate-500">策略</p>
+          <div className="flex flex-wrap gap-2">
+            {evaluation.strategies.map((strategy) => (
+              <span key={strategy} className="rounded bg-slate-100 px-2 py-1 font-mono text-xs">{strategy}</span>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      <Card title="策略汇总">
+        {evaluation.aggregates.length === 0 ? (
+          <p className="text-sm text-slate-500">上游未提供汇总记录。</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[920px] text-xs">
+              <thead><tr className="border-b text-left text-slate-500">
+                <th className="py-2 pr-3">策略</th><th className="py-2 pr-3">重复次数</th>
+                <th className="py-2 pr-3">完成 / 阻塞</th><th className="py-2 pr-3">平均轮数</th>
+                <th className="py-2 pr-3">首次证据步数</th><th className="py-2 pr-3">平均耗时</th>
+                <th className="py-2 pr-3">有效动作比例</th><th className="py-2 pr-3">降级率</th>
+                <th className="py-2 pr-3">平均证据引用</th><th className="py-2">平均冗余动作</th>
+              </tr></thead>
+              <tbody>{evaluation.aggregates.map((item) => (
+                <tr key={item.strategy} className="border-b border-slate-100">
+                  <td className="py-2 pr-3 font-mono">{item.strategy}</td>
+                  <td className="py-2 pr-3">{value(item.repetitions, 0)}</td>
+                  <td className="py-2 pr-3">{value(item.completed_runs, 0)} / {value(item.blocked_runs, 0)}</td>
+                  <td className="py-2 pr-3">{value(item.mean_rounds)}</td>
+                  <td className="py-2 pr-3">{value(item.mean_steps_to_first_evidence, 2, " 步")}</td>
+                  <td className="py-2 pr-3">{value(item.mean_elapsed_seconds, 2, " 秒")}</td>
+                  <td className="py-2 pr-3">{item.mean_effective_action_ratio == null ? "未提供" : value(item.mean_effective_action_ratio * 100, 1, "%")}</td>
+                  <td className="py-2 pr-3">{item.degradation_rate == null ? "未提供" : value(item.degradation_rate * 100, 1, "%")}</td>
+                  <td className="py-2 pr-3">{value(item.mean_evidence_refs)}</td>
+                  <td className="py-2">{value(item.mean_redundant_actions)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+        {evaluation.aggregates.some((item) => item.notes.length > 0) && (
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-500">
+            {evaluation.aggregates.flatMap((item) => item.notes).map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}
+          </ul>
+        )}
+      </Card>
+
+      <Card title="运行记录">
+        {evaluation.runs.length === 0 ? (
+          <p className="text-sm text-slate-500">上游未提供运行记录。</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[920px] text-xs">
+              <thead><tr className="border-b text-left text-slate-500">
+                <th className="py-2 pr-3">策略</th><th className="py-2 pr-3">重复序号</th>
+                <th className="py-2 pr-3">状态</th><th className="py-2 pr-3">执行轮数</th>
+                <th className="py-2 pr-3">首次证据</th><th className="py-2 pr-3">耗时</th>
+                <th className="py-2 pr-3">策略降级</th><th className="py-2 pr-3">停止原因</th>
+              </tr></thead>
+              <tbody>{evaluation.runs.map((run, index) => (
+                <RunRow key={`${run.experiment_id}-${run.run_label}-${index}`} run={run} />
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card title="案例与限制">
+        <p className="mb-2 text-xs text-slate-500">基础调查 ID</p>
+        {evaluation.base_request_ids.length > 0 ? (
+          <ul className="mb-4 list-disc space-y-1 pl-5 text-xs">
+            {evaluation.base_request_ids.map((id) => <li key={id} className="break-all font-mono">{id}</li>)}
+          </ul>
+        ) : <p className="mb-4 text-xs text-slate-500">未提供</p>}
+        <p className="mb-2 text-xs text-slate-500">评价限制</p>
+        {evaluation.limitations.length > 0 ? (
+          <ul className="list-disc space-y-1 pl-5 text-xs text-slate-600">
+            {evaluation.limitations.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        ) : <p className="text-xs text-slate-500">上游未提供限制说明。</p>}
+        <p className="mt-4 text-xs text-slate-500">
+          风险识别与防御效果指标按上游合同保留为空；本页不推断真实 LLM 调用、防御成功率或美元成本。
+        </p>
+      </Card>
+    </div>
+  );
 }
 
 export function StrategyComparisonPage() {
-  const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ["strategy-comparison"],
-    queryFn: ({ signal }) => fetchStrategyComparison(signal),
+  const [searchParams, setSearchParams] = useSearchParams();
+  const listQuery = useQuery({
+    queryKey: ["strategy-evaluations"],
+    queryFn: ({ signal }) => fetchStrategyEvaluations(signal),
   });
+  const items = useMemo(() => listQuery.data?.items ?? [], [listQuery.data?.items]);
+  const requestedId = searchParams.get("evaluation_id");
+  const selectedId = requestedId ?? items[0]?.evaluation_id ?? "";
 
-  const strategies = data?.strategies ?? [];
+  useEffect(() => {
+    if (!requestedId && items[0]?.evaluation_id) {
+      setSearchParams({ evaluation_id: items[0].evaluation_id }, { replace: true });
+    }
+  }, [items, requestedId, setSearchParams]);
+
+  const detailQuery = useQuery({
+    queryKey: ["strategy-evaluation", selectedId],
+    queryFn: ({ signal }) => fetchStrategyEvaluation(selectedId, signal),
+    enabled: Boolean(selectedId),
+  });
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="策略对比"
-        description="AgentGuard E3/E4 五策略比较。指标必须追溯到真实实验记录，不可比较的实验明确标注。"
+        title="策略评价"
+        description="读取 AgentGuard 已持久化的策略评价及其运行明细。页面不触发实验，也不补算上游未提供的指标。"
       />
 
-      {isLoading && <p className="text-sm text-slate-400">正在加载策略对比数据…</p>}
-
-      {error && (
-        <ErrorState
-          title="策略对比不可用"
-          message={error instanceof Error ? error.message : "无法获取策略对比数据"}
-          onRetry={() => void refetch()}
-          retrying={isFetching}
-        />
+      {listQuery.isLoading && <p className="text-sm text-slate-400">正在加载策略评价索引…</p>}
+      {listQuery.error && (
+        <ErrorState title="策略评价不可用" message={listQuery.error instanceof Error ? listQuery.error.message : "无法获取评价索引"}
+          onRetry={() => void listQuery.refetch()} retrying={listQuery.isFetching} />
       )}
 
-      {data && (
-        <>
-          <DemoBanner meta={data.meta} />
-
-          <Card title="实验条件">
-            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-              <div>场景：<Badge variant="neutral" className="font-mono">{data.scenario_id}</Badge></div>
-              <div>模型：<span className="font-mono">{data.model_version}</span></div>
-              <div>Seed：{data.seed}</div>
-              <div>样本数：{data.sample_count}</div>
-              <div>真实 LLM：{data.uses_real_llm ? "是" : "否"}</div>
-              <div>真实观察：{data.is_real_observation ? "是" : "否"}</div>
-              <div>预算：{data.budget.max_actions} 动作 / {data.budget.max_seconds}s / {data.budget.max_model_calls} 调用</div>
-            </div>
-            {data.comparability_warnings.length > 0 && (
-              <div className="mt-2 rounded border border-yellow-200 bg-yellow-50 px-3 py-2">
-                <p className="text-xs font-medium text-yellow-800">可比性警告：</p>
-                <ul className="ml-4 list-disc text-xs text-yellow-700">
-                  {data.comparability_warnings.map((w) => (
-                    <li key={w}>{w}</li>
-                  ))}
-                </ul>
-              </div>
+      {listQuery.data && (
+        <Card title="已保存的评价">
+          <label htmlFor="strategy-evaluation-select" className="mb-2 block text-xs text-slate-500">选择评价</label>
+          <select
+            id="strategy-evaluation-select"
+            data-testid="strategy-evaluation-select"
+            className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm"
+            value={selectedId}
+            onChange={(event) => setSearchParams(event.target.value ? { evaluation_id: event.target.value } : {})}
+          >
+            {selectedId && !items.some((item) => item.evaluation_id === selectedId) && (
+              <option value={selectedId}>{selectedId}</option>
             )}
-          </Card>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card title="时间到证据 (秒)">
-              <ReactECharts
-                option={{
-                  tooltip: { trigger: "axis" },
-                  xAxis: { type: "category", data: strategies.map((s) => s.strategy) },
-                  yAxis: { type: "value", name: "秒" },
-                  series: [{ type: "bar", data: strategies.map((s) => s.time_to_evidence), itemStyle: { color: "#3b82f6" } }],
-                }}
-                style={{ height: 260 }}
-              />
-            </Card>
-
-            <Card title="证据发现数量">
-              <ReactECharts
-                option={{
-                  tooltip: { trigger: "axis" },
-                  xAxis: { type: "category", data: strategies.map((s) => s.strategy) },
-                  yAxis: { type: "value" },
-                  series: [{ type: "bar", data: strategies.map((s) => s.evidence_count), itemStyle: { color: "#10b981" } }],
-                }}
-                style={{ height: 260 }}
-              />
-            </Card>
-
-            <Card title="有效动作比例">
-              <ReactECharts
-                option={{
-                  tooltip: { trigger: "axis" },
-                  xAxis: { type: "category", data: strategies.map((s) => s.strategy) },
-                  yAxis: { type: "value", max: 1 },
-                  series: [{ type: "bar", data: strategies.map((s) => s.effective_action_ratio), itemStyle: { color: "#8b5cf6" } }],
-                }}
-                style={{ height: 260 }}
-              />
-            </Card>
-
-            <Card title="调查成本 (USD)">
-              <ReactECharts
-                option={{
-                  tooltip: { trigger: "axis" },
-                  xAxis: { type: "category", data: strategies.map((s) => s.strategy) },
-                  yAxis: { type: "value", name: "$" },
-                  series: [{ type: "bar", data: strategies.map((s) => s.cost_usd), itemStyle: { color: "#f59e0b" } }],
-                }}
-                style={{ height: 260 }}
-              />
-            </Card>
-          </div>
-
-          <Card title="策略详情">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b text-left text-slate-500">
-                    <th className="py-2 pr-4">策略</th>
-                    <th className="py-2 pr-4">时间(s)</th>
-                    <th className="py-2 pr-4">证据数</th>
-                    <th className="py-2 pr-4">有效率</th>
-                    <th className="py-2 pr-4">冗余</th>
-                    <th className="py-2 pr-4">成本($)</th>
-                    <th className="py-2 pr-4">降级率</th>
-                    <th className="py-2 pr-4">停止原因</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {strategies.map((s) => (
-                    <tr key={s.strategy} className="border-b border-slate-100">
-                      <td className="py-2 pr-4 font-mono">{s.strategy}</td>
-                      <td className="py-2 pr-4">{s.time_to_evidence.toFixed(1)}</td>
-                      <td className="py-2 pr-4">{s.evidence_count}</td>
-                      <td className="py-2 pr-4">{(s.effective_action_ratio * 100).toFixed(0)}%</td>
-                      <td className="py-2 pr-4">{s.redundant_actions}</td>
-                      <td className="py-2 pr-4">{s.cost_usd.toFixed(2)}</td>
-                      <td className="py-2 pr-4">{(s.degradation_rate * 100).toFixed(0)}%</td>
-                      <td className="py-2 pr-4">{s.stop_reason}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          <div className="rounded border border-blue-200 bg-blue-50 px-4 py-3">
-            <p className="text-xs text-blue-800">
-              <span className="font-medium">防御效果：</span>
-              尚无可验证的真实防御效果数据。没有 WARDEN 实际干预和独立评价结果，不生成防御效果曲线。
-            </p>
-          </div>
-        </>
+            {items.map((item) => (
+              <option key={item.evaluation_id} value={item.evaluation_id}>
+                {item.comparison_id} · {item.data_partition} · {item.evaluation_id}
+              </option>
+            ))}
+          </select>
+          <p className="mt-2 text-xs text-slate-500">{listQuery.data.meta.source_note}</p>
+          {items.length === 0 && <p className="mt-3 text-sm text-slate-500">当前没有已保存的策略评价。</p>}
+        </Card>
       )}
+
+      {selectedId && detailQuery.isLoading && <p className="text-sm text-slate-400">正在加载评价详情…</p>}
+      {selectedId && detailQuery.error && (
+        <ErrorState title="评价详情不可用" message={detailQuery.error instanceof Error ? detailQuery.error.message : "无法获取评价详情"}
+          onRetry={() => void detailQuery.refetch()} retrying={detailQuery.isFetching} />
+      )}
+      {detailQuery.data && <EvaluationView evaluation={detailQuery.data.evaluation} />}
     </div>
   );
 }

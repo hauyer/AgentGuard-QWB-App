@@ -80,6 +80,7 @@ def create_stub_app(
     kernel_status: str = "not_configured",
     warden_available: bool = False,
     capabilities_status: int = 200,
+    strategy_evaluations_available: bool = False,
 ) -> FastAPI:
     app = FastAPI(title="AgentGuard Stub")
 
@@ -406,5 +407,90 @@ def create_stub_app(
             status_code=501,
             detail={"error": "UNSUPPORTED", "message": "External defense executor is unsupported."},
         )
+
+    if strategy_evaluations_available:
+        evaluation = {
+            "schema_version": "1.0",
+            "comparison_id": "comparison-contract-001",
+            "base_request_ids": ["inv-stub-0001"],
+            "strategies": ["risk_score"],
+            "repetitions": 1,
+            "data_partition": "test",
+            "runs": [{
+                "schema_version": "1.0",
+                "experiment_id": "exp-evaluation-001",
+                "run_label": "risk_score-1",
+                "strategy": "risk_score",
+                "repetition": 1,
+                "base_request_id": "inv-stub-0001",
+                "seed": None,
+                "budget": {"max_rounds": 3, "max_model_calls": 5, "max_elapsed_seconds": 30},
+                "execution_status": "completed",
+                "stop_reason": None,
+                "rounds_executed": 2,
+                "steps_to_first_evidence": None,
+                "effective_action_ratio": None,
+                "blocked_ratio": None,
+                "unsupported_ratio": None,
+                "redundant_action_count": 0,
+                "evidence_refs_collected": 0,
+                "hypotheses_raised": 0,
+                "model_calls_used": 0,
+                "elapsed_seconds": 1.25,
+                "strategy_degraded": False,
+                "loop_report_artifact_id": None,
+                "limitations": ["Contract fixture only; no live evaluation was run."],
+                "source_commit": None,
+            }],
+            "aggregates": [{
+                "schema_version": "1.0",
+                "strategy": "risk_score",
+                "repetitions": 1,
+                "completed_runs": 1,
+                "blocked_runs": 0,
+                "mean_rounds": 2.0,
+                "mean_steps_to_first_evidence": None,
+                "mean_effective_action_ratio": None,
+                "mean_redundant_actions": None,
+                "mean_evidence_refs": None,
+                "mean_elapsed_seconds": 1.25,
+                "degradation_rate": 0.0,
+                "notes": [],
+            }],
+            "risk_identification_metrics": None,
+            "defense_effectiveness_metrics": None,
+            "limitations": ["Contract fixture only; no live evaluation was run."],
+            "source_commit": None,
+            "executed_at": "2026-10-25T00:00:00+00:00",
+            "report_artifact_id": "artifact-evaluation-001",
+        }
+
+        @app.get("/v1/research/strategy-evaluations")
+        def list_strategy_evaluations(
+            data_partition: str | None = None, limit: int = 50, offset: int = 0,
+        ) -> dict:
+            entries = [{
+                "evaluation_id": "eval-strategy-001",
+                "comparison_id": evaluation["comparison_id"],
+                "report_artifact_id": evaluation["report_artifact_id"],
+                "data_partition": evaluation["data_partition"],
+                "source_commit": evaluation["source_commit"],
+                "executed_at": evaluation["executed_at"],
+                "status": "available",
+            }]
+            if data_partition and data_partition != evaluation["data_partition"]:
+                entries = []
+            page = entries[offset:offset + limit]
+            return {"schema_version": "1.0", "items": page, "count": len(page),
+                    "offset": offset, "limit": limit}
+
+        @app.get("/v1/research/strategy-evaluations/{evaluation_id}")
+        def get_strategy_evaluation(evaluation_id: str) -> dict:
+            if evaluation_id == "eval-artifact-missing":
+                raise HTTPException(status_code=410,
+                                    detail={"error": "EVALUATION_ARTIFACT_UNAVAILABLE"})
+            if evaluation_id != "eval-strategy-001":
+                raise HTTPException(status_code=404, detail={"error": "EVALUATION_NOT_FOUND"})
+            return evaluation
 
     return app

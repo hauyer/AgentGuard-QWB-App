@@ -344,6 +344,26 @@ class AgentGuardClient:
         """D3 multi-round investigation journal (rounds, decisions, budget)."""
         return self.request("GET", f"/v1/runs/{_quote(run_id)}/investigation")
 
+    def list_strategy_evaluations(
+        self,
+        *,
+        data_partition: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """List persisted strategy evaluation records from AgentGuard Research."""
+        return self.request(
+            "GET",
+            "/v1/research/strategy-evaluations",
+            query={"data_partition": data_partition, "limit": limit, "offset": offset},
+        )
+
+    def get_strategy_evaluation(self, evaluation_id: str) -> dict[str, Any]:
+        """Read one persisted strategy evaluation artifact by its registry ID."""
+        return self.request(
+            "GET", f"/v1/research/strategy-evaluations/{_quote(evaluation_id)}"
+        )
+
     # ------------------------------------------------------------------ #
     # E6: investigation service (loop-scoped)
     # ------------------------------------------------------------------ #
@@ -418,6 +438,8 @@ class AgentGuardClient:
             "GET /v1/reports",
             "GET /v1/investigation-loops",
             "POST /v1/investigation-loops",
+            "GET /v1/research/strategy-evaluations",
+            "GET /v1/research/strategy-evaluations/{evaluation_id}",
         ]
         try:
             response = self._http.get("/openapi.json")
