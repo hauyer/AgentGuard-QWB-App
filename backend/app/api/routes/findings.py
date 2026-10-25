@@ -99,8 +99,24 @@ def run_investigation(request: Request, run_id: str, user: Viewer) -> dict:
 
 
 # ------------------------------------------------------------------ #
-# E6 investigation loop read-only routes (B28)
+# E6 investigation loop read-only routes (B28/B30)
 # ------------------------------------------------------------------ #
+@router.get("/investigations/{request_id}/loops")
+def list_loops_for_investigation(request: Request, request_id: str, user: Viewer) -> dict:
+    """List loops for a base investigation. Authorization: request_id → project membership."""
+    try:
+        resource_access.require_investigation_access(
+            request.app.state.settings, _client(request), user, request_id, mode_override=_mode_override(request))
+        payload = _client(request).list_investigation_loops(request_id)
+    except resource_access.AccessDenied as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": {"error": exc.code, "message": str(exc)}})
+    except AgentGuardError as exc:
+        return JSONResponse(
+            status_code=exc.status_code or 502,
+            content={"detail": {"error": exc.code, "message": str(exc)}})
+    return {"meta": {"data_mode": "live"}, **payload}
+
+
 @router.get("/investigation-loops/{loop_id}")
 def loop_detail(request: Request, loop_id: str, user: Viewer) -> dict:
     """Read a single investigation loop. Authorization: local loop_id → project map."""
