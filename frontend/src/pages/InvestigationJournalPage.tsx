@@ -9,11 +9,11 @@ import { PageHeader } from "../components/shared/page-header";
 import { DemoBanner } from "../components/shared/demo-banner";
 import type { MetaInfo } from "../types/dashboard";
 
-// AgentGuard E2 真实合同类型
+// AgentGuard E2 官方合同类型
 // 对应上游: InvestigationLoopView / LoopDecisionView / LoopDecisionsResponse
 // LoopEvidenceChangesResponse / LoopBudgetResponse
 
-type LoopPhase = "CREATED" | "RUNNING" | "BLOCKED" | "COMPLETED" | "FAILED";
+type LoopPhase = string;
 
 interface LoopDetail {
   loop_id: string;
@@ -25,24 +25,48 @@ interface LoopDetail {
 }
 
 interface LoopDecision {
+  decision_id: string;
   round_index: number;
+  phase: LoopPhase;
+  strategy: string;
   candidate_actions: string[];
   selected_action_id: string;
   selection_reason: string | null;
-  result_status: string;
-  new_evidence: boolean;
-}
-
-interface LoopEvidenceChanges {
+  evidence_refs: string[];
   evidence_refs_before: string[];
   evidence_refs_after: string[];
   new_evidence_count: number;
+  cost_estimate: number | null;
+  actual_cost: number | null;
+  remaining_budget: number | null;
+  result_status: string;
+  new_evidence: boolean;
+  stop_reason: string | null;
+}
+
+interface LoopEvidenceChangesResponse {
+  schema_version: string;
+  loop_id: string;
+  items: LoopDecision[];
+  count: number;
+  limitations: string[];
 }
 
 interface LoopBudget {
+  loop_id: string;
   budget: { max_actions: number; max_seconds: number; max_model_calls: number };
-  metrics: { used_actions: number; actual_seconds: number; model_calls_used: number };
-  remaining: { actions_left: number; seconds_left: number; model_calls_left: number };
+  metrics: {
+    rounds_executed: number;
+    elapsed_seconds: number;
+    model_calls_used: number;
+    steps_to_first_evidence: number | null;
+    effective_action_ratio: number | null;
+  };
+  remaining: {
+    actions_left: number;
+    seconds_left: number;
+    model_calls_left: number;
+  };
 }
 
 async function fetchLoop(loopId: string, signal?: AbortSignal): Promise<{ meta: MetaInfo } & LoopDetail> {
@@ -57,7 +81,7 @@ async function fetchLoopDecisions(loopId: string, signal?: AbortSignal): Promise
   return res.json();
 }
 
-async function fetchLoopEvidenceChanges(loopId: string, signal?: AbortSignal): Promise<{ meta: MetaInfo } & LoopEvidenceChanges> {
+async function fetchLoopEvidenceChanges(loopId: string, signal?: AbortSignal): Promise<{ meta: MetaInfo } & LoopEvidenceChangesResponse> {
   const res = await fetch(`/api/investigation-loops/${encodeURIComponent(loopId)}/evidence-changes`, { signal });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
@@ -69,13 +93,17 @@ async function fetchLoopBudget(loopId: string, signal?: AbortSignal): Promise<{ 
   return res.json();
 }
 
-const phaseBadge: Record<LoopPhase, string> = {
-  CREATED: "bg-blue-50 text-blue-700",
-  RUNNING: "bg-yellow-50 text-yellow-700",
-  BLOCKED: "bg-red-50 text-red-700",
-  COMPLETED: "bg-green-50 text-green-700",
-  FAILED: "bg-red-100 text-red-800",
-};
+function phaseBadge(phase: LoopPhase) {
+  const map: Record<string, string> = {
+    CREATED: "bg-blue-50 text-blue-700",
+    RUNNING: "bg-yellow-50 text-yellow-700",
+    BLOCKED: "bg-red-50 text-red-700",
+    COMPLETED: "bg-green-50 text-green-700",
+    STOPPED: "bg-orange-50 text-orange-700",
+    FAILED: "bg-red-100 text-red-800",
+  };
+  return map[phase] ?? "bg-slate-100 text-slate-600";
+}
 
 export function InvestigationJournalPage() {
   const [searchParams] = useSearchParams();
@@ -157,7 +185,7 @@ export function InvestigationJournalPage() {
               <span className="text-slate-600">Loop ID：<span className="font-mono">{loop.loop_id}</span></span>
               <span className="text-slate-600">基础调查：<span className="font-mono">{loop.base_request_id}</span></span>
               <span className="text-slate-600">状态：
-                <span className={`ml-1 rounded-full px-2 py-0.5 font-medium ${phaseBadge[loop.phase] ?? "bg-slate-100 text-slate-600"}`}>
+                <span className={`ml-1 rounded-full px-2 py-0.5 font-medium ${phaseBadge(loop.phase)}`}>
                   {loop.phase}
                 </span>
               </span>
@@ -170,16 +198,18 @@ export function InvestigationJournalPage() {
           {budget && (
             <Card title="预算消耗">
               <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-                <div>动作：{budget.metrics.used_actions ?? "未提供"}/{budget.budget.max_actions}</div>
-                <div>时间：{budget.metrics.actual_seconds ? `${budget.metrics.actual_seconds.toFixed(1)}s` : "未提供"}/{budget.budget.max_seconds}s</div>
+                <div>执行轮次：{budget.metrics.rounds_executed ?? "未提供"}</div>
+                <div>已用时间：{budget.metrics.elapsed_seconds != null ? `${budget.metrics.elapsed_seconds.toFixed(1)}s` : "未提供"}/{budget.budget.max_seconds}s</div>
                 <div>模型调用：{budget.metrics.model_calls_used ?? "未提供"}/{budget.budget.max_model_calls}</div>
+                <div>首证据步数：{budget.metrics.steps_to_first_evidence ?? "未提供"}</div>
+                <div>有效动作率：{budget.metrics.effective_action_ratio != null ? `${(budget.metrics.effective_action_ratio * 100).toFixed(1)}%` : "未提供"}</div>
               </div>
             </Card>
           )}
 
           <div className="space-y-3">
             {decisions.map((decision) => (
-              <Card key={decision.round_index} title={`Round ${decision.round_index}`}>
+              <Card key={decision.decision_id} title={`Round ${decision.round_index}`}>
                 <div className="mb-2 flex items-center gap-2 text-xs">
                   <span className="text-slate-500">最终动作：</span>
                   <Badge variant="ok">{decision.selected_action_id}</Badge>
@@ -206,6 +236,7 @@ export function InvestigationJournalPage() {
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
                   本轮是否产生新证据：{decision.new_evidence ? "是" : "否"}
+                  {decision.new_evidence_count != null && `（${decision.new_evidence_count} 条）`}
                 </p>
               </Card>
             ))}
@@ -217,20 +248,30 @@ export function InvestigationJournalPage() {
 
           {evidence && (
             <Card title="证据变化">
-              <div className="text-xs text-slate-600">
-                <p className="mb-1">
-                  <span className="font-medium">证据总数：</span>
-                  {evidence.new_evidence_count ?? 0} 条新证据
-                </p>
-                <p className="mb-1">
-                  <span className="font-medium">证据引用：</span>
-                  {evidence.evidence_refs_after && evidence.evidence_refs_after.length > 0
-                    ? evidence.evidence_refs_after.map((id) => (
-                        <span key={id} className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono">{id}</span>
-                      ))
-                    : "（无）"}
-                </p>
-              </div>
+              {evidence.count === 0 ? (
+                <p className="text-xs text-slate-500">暂无新增证据。</p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-600">
+                    <span className="font-medium">证据变化总数：</span>
+                    {evidence.count}
+                  </p>
+                  {evidence.items.map((item) => (
+                    <div key={item.decision_id} className="text-xs text-slate-600">
+                      <span className="font-medium">Round {item.round_index}：</span>
+                      {item.new_evidence_count != null && `${item.new_evidence_count} 条新证据`}
+                      {item.evidence_refs_after && item.evidence_refs_after.length > 0 && (
+                        <span className="ml-2">
+                          证据引用：
+                          {item.evidence_refs_after.map((id) => (
+                            <span key={id} className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono">{id}</span>
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
           )}
         </>
