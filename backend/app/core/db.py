@@ -13,7 +13,7 @@ import logging
 import threading
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -43,6 +43,12 @@ def get_engine(settings: Settings) -> Engine | None:
                 if settings.database_url.startswith("sqlite")
                 else {},
             )
+            if settings.database_url.startswith("sqlite"):
+                @event.listens_for(engine, "connect")
+                def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+                    cursor = dbapi_connection.cursor()
+                    cursor.execute("PRAGMA foreign_keys=ON")
+                    cursor.close()
             _ENGINES[settings.database_url] = engine
     return engine
 
