@@ -17,10 +17,10 @@ import {
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useSystemStatus } from "../../hooks/use-system-status";
-import { useAuthStore } from "../../stores/auth-store";
 import { cn } from "../../utils/cn";
 import { Badge } from "../ui/badge";
 import { StatusDot } from "../ui/status-dot";
+import { SessionControl } from "./SessionControl";
 
 const NAV_ITEMS = [
   { to: "/", label: "系统总览", icon: LayoutDashboard, end: true },
@@ -57,8 +57,7 @@ function dataModeLabel(mode: string): string {
 export function AppLayout() {
   const { data } = useSystemStatus();
   const agentguardReachable = data?.agentguard.reachable;
-  const username = useAuthStore((state) => state.username);
-  const role = useAuthStore((state) => state.role);
+  const syntheticBackend = data?.agentguard.capabilities?.backend_mode?.toLowerCase() === "synthetic";
 
   return (
     <div className="flex h-full min-h-screen">
@@ -106,9 +105,19 @@ export function AppLayout() {
               <StatusDot tone={agentguardReachable === undefined ? "neutral" : agentguardReachable ? "ok" : "danger"} />
               AgentGuard {agentguardReachable ? "已连接" : agentguardReachable === undefined ? "检测中" : "不可用"}
             </span>
-            <span className="text-slate-500">{role ?? "Viewer"}{username ? ` · ${username}` : ""}</span>          </div>
+            <SessionControl />
+          </div>
         </header>
         <main className="min-w-0 flex-1 overflow-y-auto p-6">
+          {syntheticBackend && (
+            <div
+              role="status"
+              data-testid="synthetic-backend-banner"
+              className="mb-4 rounded-md border border-violet-200 bg-violet-50 px-4 py-3 text-xs text-violet-800"
+            >
+              当前 AgentGuard backend_mode 为 SYNTHETIC。这里的 Stub 数据仅用于合同与流程验证，不代表真实 WARDEN、模型运行或实验结果。
+            </div>
+          )}
           <Outlet />
         </main>
       </div>

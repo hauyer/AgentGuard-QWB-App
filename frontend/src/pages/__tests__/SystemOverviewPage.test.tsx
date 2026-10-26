@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppLayout } from "../../components/layout/AppLayout";
 import { SystemOverviewPage } from "../../pages/SystemOverviewPage";
+import { useAuthStore } from "../../stores/auth-store";
 import type { DashboardResponse } from "../../types/dashboard";
 import type { SystemStatus } from "../../types/system";
 
@@ -205,6 +206,7 @@ describe("SystemOverviewPage", () => {
 
 describe("AppLayout navigation", () => {
   it("renders the global navigation", () => {
+    useAuthStore.getState().clearSession();
     renderWithProviders(
       <Routes>
         <Route path="/" element={<AppLayout />}>

@@ -7,6 +7,7 @@ import { useAuthStore } from "../stores/auth-store";
 export function useSessionBootstrap() {
   const status = useAuthStore((state) => state.status);
   useEffect(() => {
+    if (status === "ready") return;
     let cancelled = false;
     fetchMe()
       .then((me) => {
@@ -25,6 +26,6 @@ export function useSessionBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [status]);
   return status;
 }

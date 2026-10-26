@@ -1,14 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// E2E smoke: the real frontend against the real BFF.
-// Requires the backend to run (see README quickstart). Marked with @smoke.
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: true,
+  fullyParallel: false,
+  workers: 1,
   timeout: 60_000,
   retries: 0,
+  globalSetup: "./e2e/global-setup.ts",
+  globalTeardown: "./e2e/global-teardown.ts",
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? "http://localhost:5173",
+    baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:5173",
     trace: "on-first-retry",
   },
   projects: [

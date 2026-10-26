@@ -82,6 +82,7 @@ def create_stub_app(
     capabilities_status: int = 200,
     strategy_evaluations_available: bool = False,
     investigation_loop_report_available: bool = False,
+    e2e_isolation_loops: bool = False,
     report_empty_evidence: bool = False,
     report_long_text: bool = False,
 ) -> FastAPI:
@@ -574,16 +575,30 @@ def create_stub_app(
                     "rounds_executed": 1,
                     "stop_reason": "BUDGET_EXHAUSTED",
                 }]
+            elif e2e_isolation_loops and base_request_id == "inv-stub-graph-0002":
+                items = [{
+                    "loop_id": "loop-stub-002",
+                    "base_request_id": base_request_id,
+                    "phase": "STOPPED",
+                    "strategy": "risk_score",
+                    "rounds_executed": 1,
+                    "stop_reason": "BUDGET_EXHAUSTED",
+                }]
             return {"schema_version": "1.0", "items": items, "count": len(items),
                     "limit": limit, "offset": offset}
 
         @app.get("/v1/investigation-loops/{loop_id}")
         def report_get_loop(loop_id: str) -> dict:
             phase = "BLOCKED" if "blocked" in loop_id else "FAILED" if "failed" in loop_id else "STOPPED"
+            base_request_id = (
+                "inv-stub-graph-0002"
+                if e2e_isolation_loops and loop_id == "loop-stub-002"
+                else "inv-stub-0001"
+            )
             return {
                 "schema_version": "1.0",
                 "loop_id": loop_id,
-                "base_request_id": "inv-stub-0001",
+                "base_request_id": base_request_id,
                 "phase": phase,
                 "strategy": "risk_score",
                 "stop_reason": "UPSTREAM_UNAVAILABLE" if phase == "FAILED" else "BUDGET_EXHAUSTED",
