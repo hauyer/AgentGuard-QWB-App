@@ -33,7 +33,7 @@ export function DefensePage() {
     <div className="space-y-4">
       <PageHeader
         title="定向防御"
-        description="防御候选与预览。当前 AgentGuard 外部防御执行器尚未验证：候选可展示、可预览、可展示审批条件，但不可执行。"
+        description="防御候选仅可预览；执行器尚未通过验证。"
       />
 
       <div className="flex flex-wrap items-center gap-3">

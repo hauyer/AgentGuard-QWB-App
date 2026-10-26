@@ -50,7 +50,7 @@ export function DemoCenterPage() {
     <div className="space-y-4">
       <PageHeader
         title="演示导览"
-        description="完整可复现的离线演示流程：从打开平台到生成报告。所有数据均明确标识为 RECORDED / SYNTHETIC 回放，不是实时后端。"
+        description="可复现的离线流程。数据标记为 RECORDED 或 SYNTHETIC。"
       />
 
       {isLoading && <p className="text-sm text-slate-400">正在加载演示导览…</p>}

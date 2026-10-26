@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: light;
+  --color-brand-50: #f0f5ff;
+  --color-brand-100: #e0ebff;
+  --color-brand-500: #2563eb;
+  --color-brand-600: #1d4ed8;
+  --color-brand-700: #1e40af;
+  --color-brand-900: #0f2a63;
+  --color-brand-950: #0a1a3f;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f5f7fa;
+  --color-surface-border: #d7dde6;
+  --color-ok: #16a34a;
+  --color-warn: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
+  --color-neutral: #6b7280;
+}
+
 @layer base {
   html,
   body,
@@ -10,5 +29,13 @@
   }
   body {
     @apply bg-surface-muted text-slate-800 antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--color-brand-100);
+    color: var(--color-brand-950);
   }
 }

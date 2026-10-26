@@ -168,7 +168,7 @@ export function StrategyComparisonPage() {
     <div className="space-y-4">
       <PageHeader
         title="策略评价"
-        description="读取 AgentGuard 已持久化的策略评价及其运行明细。页面不触发实验，也不补算上游未提供的指标。"
+        description="已持久化的评价与运行明细；未提供的指标保持为空。"
       />
 
       {listQuery.isLoading && <p className="text-sm text-slate-400">正在加载策略评价索引…</p>}

@@ -34,6 +34,12 @@ export interface InvestigationLoopSubmissionResponse {
   loop: Record<string, unknown> | null;
 }
 
+export interface ReconcileLoopSubmissionRequest {
+  action: "resume" | "associate_loop" | "confirm_not_created";
+  loop_id?: string;
+  operator_note?: string;
+}
+
 export interface InvestigationLoopListItem {
   loop_id: string;
   base_request_id: string;
@@ -122,9 +128,11 @@ export function fetchInvestigationLoopSubmission(
 export function reconcileInvestigationLoopSubmission(
   requestId: string,
   submissionId: string,
+  body: ReconcileLoopSubmissionRequest,
 ): Promise<InvestigationLoopSubmissionResponse> {
   return apiPost<InvestigationLoopSubmissionResponse>(
     `/investigations/${encodeURIComponent(requestId)}/loop-submissions/${encodeURIComponent(submissionId)}/reconcile`,
+    body,
   );
 }
 

@@ -32,7 +32,7 @@ export function ExperimentsPage() {
     <div className="space-y-4">
       <PageHeader
         title="实验对比"
-        description="比较维度：模型版本 / 场景 / 调查策略 / 防御策略 / 执行状态 / 风险指标 / 正常任务效用 / 调查预算。"
+        description="按模型、场景、策略、风险指标和预算比较运行记录。"
       />
 
       {isLoading && <p className="text-sm text-slate-400">正在加载实验数据…</p>}

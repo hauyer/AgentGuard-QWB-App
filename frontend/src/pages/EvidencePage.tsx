@@ -30,7 +30,7 @@ export function EvidencePage() {
     <div className="space-y-4">
       <PageHeader
         title="证据分析"
-        description="AgentGuard 公共证据 API 结果。证据等级严格区分 synthetic / observational / interventional / causal_validated。"
+        description="按来源、证据等级和验证状态浏览。"
       />
 
       <div className="flex flex-wrap items-center gap-3">

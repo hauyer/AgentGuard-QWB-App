@@ -20,7 +20,7 @@ export function ExperiencesPage() {
     <div className="space-y-4">
       <PageHeader
         title="经验中心"
-        description="已验证经验展示与查询。第一版只做展示和查询，不在应用层开发 Thompson Sampling。"
+        description="已验证经验索引与检索。"
       />
 
       {isLoading && <p className="text-sm text-slate-400">正在加载经验…</p>}

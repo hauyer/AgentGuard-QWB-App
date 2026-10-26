@@ -60,7 +60,7 @@ export function FindingsPage() {
     <div className="space-y-4">
       <PageHeader
         title="风险发现"
-        description="AgentGuard E1 风险分析结果。每项风险显示类别、检测方法、严重程度、评分校准状态、支持证据与尚未证实的内容。"
+        description="风险等级、支持证据与待验证事项。"
       />
 
       <div className="flex flex-wrap items-center gap-3">

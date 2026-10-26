@@ -8,6 +8,7 @@ import {
 } from "../services/investigations";
 import type {
   CreateInvestigationLoopRequest,
+  ReconcileLoopSubmissionRequest,
 } from "../services/investigations";
 
 export function useCreateInvestigationLoop(requestId: string) {
@@ -37,6 +38,7 @@ export function useInvestigationLoopSubmission(requestId: string, submissionId: 
 
 export function useReconcileInvestigationLoop(requestId: string) {
   return useMutation({
-    mutationFn: (submissionId: string) => reconcileInvestigationLoopSubmission(requestId, submissionId),
+    mutationFn: (input: { submissionId: string; body: ReconcileLoopSubmissionRequest }) =>
+      reconcileInvestigationLoopSubmission(requestId, input.submissionId, input.body),
   });
 }

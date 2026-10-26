@@ -50,7 +50,7 @@ export function HypothesesPage() {
     <div className="space-y-4">
       <PageHeader
         title="调查假设"
-        description="AgentGuard E1 调查假设。针对每个风险发现展示假设内容、提出理由、证据支持情况、反对证据与仍需验证的条件。"
+        description="查看每项风险的支持证据、反对证据与待验证条件。"
       />
 
       <div className="flex flex-wrap items-center gap-3">

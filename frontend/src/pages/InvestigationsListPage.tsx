@@ -128,7 +128,7 @@ export function InvestigationsListPage() {
     <div className="space-y-4">
       <PageHeader
         title="安全调查"
-        description="创建与跟踪多智能体安全审计调查。所有状态来自 AgentGuard 或明确标注的演示样例。"
+        description="创建并跟踪项目授权范围内的安全调查。"
         actions={
           canCreate ? (
             <Link to="/investigations/new">

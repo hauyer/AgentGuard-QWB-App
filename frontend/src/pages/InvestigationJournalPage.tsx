@@ -156,7 +156,7 @@ export function InvestigationJournalPage() {
     <div className="space-y-4">
       <PageHeader
         title="多轮调查"
-        description="AgentGuard E2 多轮自主调查记录。展示每轮动作选择、执行结果、证据变化与预算消耗。"
+        description="按轮查看决策、证据变化和预算消耗。"
         actions={
           loop?.base_request_id ? (
             <Link

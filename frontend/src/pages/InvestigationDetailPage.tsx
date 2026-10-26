@@ -5,6 +5,7 @@ import { useInvestigation, useTimeline } from "../hooks/use-investigations";
 import {
   useCreateInvestigationLoop,
   useInvestigationLoopSubmission,
+  useInvestigationLoops,
   useReconcileInvestigationLoop,
 } from "../hooks/use-investigation-loops";
 import type { CreateInvestigationLoopRequest, LoopDataPartition, LoopStrategy } from "../services/investigations";
@@ -157,12 +158,112 @@ export function InvestigationDetailPage() {
         </Link>
       </div>
 
+      <InvestigationLoopList
+        requestId={requestId}
+        dataMode={meta.data_mode}
+        hasProject={((meta as MetaInfo & { project_ids?: number[] }).project_ids ?? []).length > 0}
+      />
+
       <LoopCreatePanel
         requestId={requestId}
         dataMode={meta.data_mode}
         hasProject={((meta as MetaInfo & { project_ids?: number[] }).project_ids ?? []).length > 0}
       />
     </div>
+  );
+}
+
+function InvestigationLoopList({
+  requestId,
+  dataMode,
+  hasProject,
+}: {
+  requestId: string;
+  dataMode: string;
+  hasProject: boolean;
+}) {
+  const liveProject = dataMode === "live" && hasProject;
+  const loops = useInvestigationLoops(requestId, liveProject);
+  const ownershipVerified = loops.data?.meta.ownership_verified === true;
+
+  if (!liveProject) {
+    return (
+      <Card title="多轮调查" description="仅展示已授权调查对应的 Loop">
+        <p className="text-sm text-slate-500">
+          {hasProject ? `当前 ${dataMode.toUpperCase()} 数据源没有可验证的 Live Loop 列表。` : "该调查没有已验证的项目归属。"}
+        </p>
+      </Card>
+    );
+  }
+
+  if (loops.isPending) {
+    return <Card title="多轮调查"><p className="text-sm text-slate-500">正在读取 Loop 列表…</p></Card>;
+  }
+
+  if (loops.isError || !loops.data) {
+    return (
+      <Card title="多轮调查" description="AgentGuard 实时数据">
+        <ErrorState
+          title="Loop 列表不可用"
+          message={loops.error instanceof Error ? loops.error.message : "无法读取 Loop 列表"}
+          onRetry={() => void loops.refetch()}
+          retrying={loops.isFetching}
+        />
+      </Card>
+    );
+  }
+
+  const items = loops.data.items ?? [];
+  return (
+    <Card title="多轮调查" description="AgentGuard · LIVE" action={(
+      <Button variant="secondary" onClick={() => void loops.refetch()} disabled={loops.isFetching}>
+        {loops.isFetching ? "刷新中…" : "刷新"}
+      </Button>
+    )}>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-500">此基础调查尚无 Loop。</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-xs">
+            <thead>
+              <tr className="border-b border-surface-border text-left text-[11px] text-slate-500">
+                <th className="py-2 pr-4 font-medium">Loop</th>
+                <th className="py-2 pr-4 font-medium">阶段</th>
+                <th className="py-2 pr-4 font-medium">策略</th>
+                <th className="py-2 pr-4 text-right font-medium">已执行轮数</th>
+                <th className="py-2 pr-4 font-medium">停止原因</th>
+                <th className="py-2 pr-4 font-medium">创建时间</th>
+                <th className="py-2 font-medium">来源</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((loop) => (
+                <tr key={loop.loop_id} className="border-b border-slate-100 last:border-0">
+                  <td className="py-2.5 pr-4 font-mono">
+                    {ownershipVerified ? (
+                      <Link
+                        className="font-medium text-brand-700 hover:text-brand-900 hover:underline"
+                        to={`/investigation-journal?loop_id=${encodeURIComponent(loop.loop_id)}`}
+                      >
+                        {loop.loop_id}
+                      </Link>
+                    ) : loop.loop_id}
+                  </td>
+                  <td className="py-2.5 pr-4">{loop.phase ?? "未提供"}</td>
+                  <td className="py-2.5 pr-4">{loop.strategy ?? "未提供"}</td>
+                  <td className="py-2.5 pr-4 text-right">
+                    {typeof loop.rounds_executed === "number" ? loop.rounds_executed : loop.metrics?.rounds_executed ?? "未提供"}
+                  </td>
+                  <td className="max-w-48 truncate py-2.5 pr-4" title={loop.stop_reason ?? undefined}>{loop.stop_reason ?? "未提供"}</td>
+                  <td className="py-2.5 pr-4">{loop.created_at ?? "未提供"}</td>
+                  <td className="py-2.5"><span className="rounded bg-emerald-50 px-1.5 py-1 text-[10px] text-emerald-700">LIVE</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -216,9 +317,12 @@ function LoopCreatePanel({
   const storageKey = `qwb.loop-create.${requestId}`;
   const [draft, setDraft] = useState<LoopDraft>(() => readLoopDraft(storageKey));
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [reconciliationNote, setReconciliationNote] = useState("");
+  const [reconciliationLoopId, setReconciliationLoopId] = useState("");
   const create = useCreateInvestigationLoop(requestId);
   const reconcile = useReconcileInvestigationLoop(requestId);
   const submission = useInvestigationLoopSubmission(requestId, draft.submission_id, draft.pending);
+  const loops = useInvestigationLoops(requestId, dataMode === "live" && hasProject && draft.pending);
 
   useEffect(() => {
     if (submission.data?.submission.status === "COMPLETED" && submission.data.submission.loop_id) {
@@ -298,10 +402,19 @@ function LoopCreatePanel({
       void submission.refetch();
     }
   };
-  const checkStatus = async () => {
+  const checkStatus = async (
+    action: "resume" | "associate_loop" | "confirm_not_created" = "resume",
+  ) => {
     setErrorMessage(null);
     try {
-      const response = await reconcile.mutateAsync(draft.submission_id);
+      const body = action === "resume"
+        ? { action }
+        : {
+          action,
+          ...(action === "associate_loop" ? { loop_id: reconciliationLoopId } : {}),
+          operator_note: reconciliationNote.trim(),
+        };
+      const response = await reconcile.mutateAsync({ submissionId: draft.submission_id, body });
       if (response.submission.status === "COMPLETED" && response.submission.loop_id) {
         window.sessionStorage.removeItem(storageKey);
         navigate(`/investigation-journal?loop_id=${encodeURIComponent(response.submission.loop_id)}`);
@@ -396,9 +509,67 @@ function LoopCreatePanel({
       {errorMessage && <p role="alert" className="mt-3 text-xs text-amber-800">{errorMessage}</p>}
       {draft.pending ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button variant="secondary" disabled={reconcile.isPending} onClick={() => void checkStatus()}>
-            {reconcile.isPending ? "正在核对…" : "查询并恢复同一提交"}
-          </Button>
+          {serverStatus?.status === "PREPARED" && (
+            <Button variant="secondary" disabled={reconcile.isPending} onClick={() => void checkStatus("resume")}>
+              {reconcile.isPending ? "正在恢复…" : "恢复尚未发送的提交"}
+            </Button>
+          )}
+          {serverStatus?.status === "SUBMISSION_AMBIGUOUS" && (
+            <div className="w-full space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs text-amber-900">
+                上游未提供本次提交的关联标识。请先在 AgentGuard 核实，再选择新出现的 Loop 或确认没有创建。
+              </p>
+              <select
+                aria-label="选择待关联的 Loop"
+                value={reconciliationLoopId}
+                onChange={(event) => setReconciliationLoopId(event.target.value)}
+                className="w-full rounded-md border border-surface-border bg-white px-2 py-1.5 text-xs text-slate-800"
+              >
+                <option value="">选择已核实为本次提交的 Loop</option>
+                {(loops.data?.items ?? []).map((loop) => (
+                  <option key={loop.loop_id} value={loop.loop_id}>{loop.loop_id} · {loop.phase ?? "状态未提供"}</option>
+                ))}
+              </select>
+              <label className="block text-xs text-slate-700">
+                核对记录（至少 10 个字符）
+                <input
+                  value={reconciliationNote}
+                  onChange={(event) => setReconciliationNote(event.target.value)}
+                  maxLength={500}
+                  className="mt-1 w-full rounded-md border border-surface-border bg-white px-2 py-1.5"
+                  placeholder="例如：已核对 AgentGuard 审计记录 AG-123"
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  disabled={reconcile.isPending || !reconciliationLoopId || reconciliationNote.trim().length < 10}
+                  onClick={() => void checkStatus("associate_loop")}
+                >
+                  关联所选 Loop
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={reconcile.isPending || reconciliationNote.trim().length < 10}
+                  onClick={() => {
+                    if (window.confirm("确认已在 AgentGuard 核查并确认没有创建本次 Loop？这会释放该调查的创建锁。")) {
+                      void checkStatus("confirm_not_created");
+                    }
+                  }}
+                >
+                  确认未创建
+                </Button>
+              </div>
+            </div>
+          )}
+          {serverStatus?.status === "SUBMITTING" && (
+            <p className="text-xs text-amber-800">AgentGuard 请求仍在处理中；请稍后查询，不要发起新的提交。</p>
+          )}
+          {serverStatus?.status === "LINK_PENDING" && (
+            <Button variant="secondary" disabled={reconcile.isPending} onClick={() => void checkStatus("resume")}>
+              {reconcile.isPending ? "正在补全项目关联…" : "补全本地项目关联"}
+            </Button>
+          )}
           {serverStatus?.status === "FAILED" && (
             <Button variant="secondary" onClick={clearPending}>使用新提交号重新编辑</Button>
           )}

@@ -1,7 +1,6 @@
 import { AlertTriangle, ServerCrash } from "lucide-react";
 
 import { DemoBanner } from "../components/shared/demo-banner";
-import { MetricCard } from "../components/shared/metric-card";
 import { PageHeader } from "../components/shared/page-header";
 import { Skeleton } from "../components/shared/skeleton";
 import { Badge } from "../components/ui/badge";
@@ -50,42 +49,46 @@ export function SystemOverviewPage() {
       <PageHeader title="系统总览" description="当前系统运行状态与安全调查概况" />
       <DemoBanner meta={meta} />
 
-      {/* 系统健康 */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <HealthCard title="应用服务 BFF" ok={system.app.status === "ok"} detail={`${system.app.name} v${system.app.version}`} />
-        <HealthCard
-          title="AgentGuard"
-          ok={system.agentguard.reachable}
-          detail={
-            system.agentguard.health?.version
-              ? `v${system.agentguard.health.version} · ${system.agentguard.health.status}`
-              : system.agentguard.error?.message ?? "未知"
-          }
-          errorCode={system.agentguard.error?.code}
-          requestId={system.agentguard.error?.request_id}
-        />
-        <HealthCard
-          title="WARDEN 内核"
-          ok={system.warden.status === "available"}
-          detail={
-            system.warden.status === "available"
-              ? `可用 · ${system.warden.base_url ?? ""}`
-              : system.warden.reason ?? `状态：${system.warden.status}`
-          }
-          errorCode={system.warden.error_code ?? undefined}
-        />
-      </div>
+      <Card title="依赖状态">
+        <div className="grid grid-cols-1 divide-y divide-surface-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <HealthStatus title="应用服务 BFF" ok={system.app.status === "ok"} detail={`${system.app.name} v${system.app.version}`} />
+          <HealthStatus
+            title="AgentGuard"
+            ok={system.agentguard.reachable}
+            detail={
+              system.agentguard.health?.version
+                ? `v${system.agentguard.health.version} · ${system.agentguard.health.status}`
+                : system.agentguard.error?.message ?? "未知"
+            }
+            errorCode={system.agentguard.error?.code}
+            requestId={system.agentguard.error?.request_id}
+          />
+          <HealthStatus
+            title="WARDEN 内核"
+            ok={system.warden.status === "available"}
+            detail={
+              system.warden.status === "available"
+                ? `可用 · ${system.warden.base_url ?? ""}`
+                : system.warden.reason ?? `状态：${system.warden.status}`
+            }
+            errorCode={system.warden.error_code ?? undefined}
+          />
+        </div>
+      </Card>
 
       {/* 调查概况 */}
       <Card title="调查概况" description={sampleNote(data.investigation_summary.sample_based, "最近 200 条样本")}>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <MetricCard title="调查总数" value={data.investigation_summary.total} unavailable={!data.investigation_summary.available} />
-          <MetricCard title="运行中" value={data.investigation_summary.running} unavailable={!data.investigation_summary.available} />
-          <MetricCard title="已完成" value={data.investigation_summary.completed} unavailable={!data.investigation_summary.available} />
-          <MetricCard title="阻塞" value={data.investigation_summary.blocked} unavailable={!data.investigation_summary.available} />
-          <MetricCard title="失败" value={data.investigation_summary.failed} unavailable={!data.investigation_summary.available} />
-          <MetricCard title="待处理" value={data.investigation_summary.pending} unavailable={!data.investigation_summary.available} />
-        </div>
+        <MetricStrip
+          unavailable={!data.investigation_summary.available}
+          items={[
+            { title: "调查总数", value: data.investigation_summary.total },
+            { title: "运行中", value: data.investigation_summary.running },
+            { title: "已完成", value: data.investigation_summary.completed },
+            { title: "阻塞", value: data.investigation_summary.blocked },
+            { title: "失败", value: data.investigation_summary.failed },
+            { title: "待处理", value: data.investigation_summary.pending },
+          ]}
+        />
         {data.investigation_summary.error && (
           <p className="mt-2 text-xs text-red-700">{data.investigation_summary.error}</p>
         )}
@@ -141,12 +144,15 @@ export function SystemOverviewPage() {
 
       {/* 策略状态 */}
       <Card title="策略状态" description="防御候选仅预览，不执行">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MetricCard title="待审批候选" value={data.policy_summary.pending_approval} unavailable={!data.policy_summary.available} />
-          <MetricCard title="已审批候选" value={data.policy_summary.approved} unavailable={!data.policy_summary.available} />
-          <MetricCard title="不支持执行" value={data.policy_summary.unsupported} unavailable={!data.policy_summary.available} />
-          <MetricCard title="已验证历史结果" value={data.policy_summary.verified_historical} unavailable={!data.policy_summary.available} />
-        </div>
+        <MetricStrip
+          unavailable={!data.policy_summary.available}
+          items={[
+            { title: "待审批候选", value: data.policy_summary.pending_approval },
+            { title: "已审批候选", value: data.policy_summary.approved },
+            { title: "不支持执行", value: data.policy_summary.unsupported },
+            { title: "已验证历史结果", value: data.policy_summary.verified_historical },
+          ]}
+        />
         {data.policy_summary.error && <p className="mt-2 text-xs text-red-700">{data.policy_summary.error}</p>}
       </Card>
 
@@ -171,7 +177,7 @@ export function SystemOverviewPage() {
           )}
         </Card>
 
-        <Card title="后端依赖阻塞" description="AgentGuard A7 验收期已知集成阻塞">
+        <Card title="后端依赖阻塞" description="当前固定版本的集成状态">
           <ul className="space-y-2 text-xs">
             {data.dependency_blockers.map((blocker) => (
               <li key={blocker.id} className="flex items-start gap-2">
@@ -205,7 +211,7 @@ function Unavailable({ note }: { note?: string | null }) {
   );
 }
 
-function HealthCard({
+function HealthStatus({
   title,
   ok,
   detail,
@@ -219,7 +225,8 @@ function HealthCard({
   requestId?: string | null;
 }) {
   return (
-    <Card title={title}>
+    <section className="px-0 py-3 first:pt-0 last:pb-0 sm:px-4 sm:first:pl-0 sm:first:pt-0 sm:last:pr-0 sm:last:pb-0">
+      <h3 className="mb-2 text-xs font-semibold text-slate-600">{title}</h3>
       <div className="flex items-center gap-2">
         <StatusDot tone={ok ? "ok" : "danger"} />
         <Badge variant={ok ? "ok" : "danger"}>{ok ? "正常" : "不可用"}</Badge>
@@ -231,6 +238,27 @@ function HealthCard({
           {requestId && <span className="ml-2">Request ID：{requestId}</span>}
         </p>
       )}
-    </Card>
+    </section>
+  );
+}
+
+function MetricStrip({
+  items,
+  unavailable,
+}: {
+  items: { title: string; value: number | null | undefined }[];
+  unavailable: boolean;
+}) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 lg:grid-cols-6">
+      {items.map((item) => (
+        <div key={item.title} className="border-l border-surface-border pl-3">
+          <dt className="text-[11px] text-slate-500">{item.title}</dt>
+          <dd className="mt-1 text-lg font-semibold tabular-nums text-slate-800">
+            {unavailable || item.value == null ? "不可用" : item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }

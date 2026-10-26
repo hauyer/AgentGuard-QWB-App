@@ -217,7 +217,7 @@ function InteractionGraphView() {
     <div className="space-y-4">
       <PageHeader
         title="交互图谱"
-        description="Agent ↔ 工具 ↔ 模型通信。所有节点与边均带来源 ID，可追溯到录制样本。"
+        description="多 Agent、工具与模型关系；节点保留来源 ID。"
         actions={
           <Button variant="secondary" onClick={() => void exportPng()} disabled={exporting}>
             {exporting ? "导出中…" : "导出 PNG"}

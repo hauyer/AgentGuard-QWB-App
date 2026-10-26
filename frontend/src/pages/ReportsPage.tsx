@@ -36,7 +36,7 @@ export function ReportsPage() {
     <div className="space-y-4">
       <PageHeader
         title="报告中心"
-        description="调查报告预览、证据摘要与防御候选汇总。PDF 由应用层生成，不改指标、不推断新的因果结论。"
+        description="调查报告、证据摘要与可下载文件。"
       />
 
       <div className="flex flex-wrap items-center gap-3">

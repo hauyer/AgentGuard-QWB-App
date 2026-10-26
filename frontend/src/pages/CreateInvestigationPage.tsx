@@ -112,7 +112,7 @@ export function CreateInvestigationPage() {
     <div className="space-y-4">
       <PageHeader
         title="新建安全调查"
-        description="按 AgentGuard WardenAuditRequest 合同创建调查。提交前会校验威胁契约、模型与运行时标识。"
+        description="按 AgentGuard 合同校验威胁契约、模型与运行时标识。"
         actions={
           <Link to="/investigations" className="text-sm text-slate-500 hover:text-slate-700">
             返回列表

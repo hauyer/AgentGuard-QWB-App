@@ -4,27 +4,26 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Modern security-platform palette: deep blue, white, grey.
         brand: {
-          50: "#f0f5ff",
-          100: "#e0ebff",
-          500: "#2563eb",
-          600: "#1d4ed8",
-          700: "#1e40af",
-          900: "#0f2a63",
-          950: "#0a1a3f",
+          50: "var(--color-brand-50)",
+          100: "var(--color-brand-100)",
+          500: "var(--color-brand-500)",
+          600: "var(--color-brand-600)",
+          700: "var(--color-brand-700)",
+          900: "var(--color-brand-900)",
+          950: "var(--color-brand-950)",
         },
         surface: {
-          DEFAULT: "#ffffff",
-          muted: "#f5f7fa",
-          border: "#d7dde6",
+          DEFAULT: "var(--color-surface)",
+          muted: "var(--color-surface-muted)",
+          border: "var(--color-surface-border)",
         },
         semantic: {
-          ok: "#16a34a",
-          warn: "#d97706",
-          danger: "#dc2626",
-          info: "#2563eb",
-          neutral: "#6b7280",
+          ok: "var(--color-ok)",
+          warn: "var(--color-warn)",
+          danger: "var(--color-danger)",
+          info: "var(--color-info)",
+          neutral: "var(--color-neutral)",
         },
       },
       fontFamily: {
