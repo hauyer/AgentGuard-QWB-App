@@ -28,6 +28,7 @@ from tests.conftest import make_settings
 APP_SECRET = "j3-loop-create-secret-key-0123456789abcdef"
 POST_OPERATION = "POST /v1/investigation-loops"
 GET_OPERATION = "GET /v1/investigation-loops"
+DETAIL_OPERATION = "GET /v1/investigation-loops/{loop_id}"
 
 
 class LoopCreateUpstream:
@@ -35,10 +36,12 @@ class LoopCreateUpstream:
         self.calls: list[tuple] = []
         self.loops: list[dict] = []
         self.created: list[dict] = []
+        self.idempotent_results: dict[str, dict] = {}
         self.create_error: AgentGuardError | None = None
+        self.accept_before_error = False
         self.investigation_status = "completed"
         self.health_error: AgentGuardError | None = None
-        self.operations = {POST_OPERATION: True, GET_OPERATION: True}
+        self.operations = {POST_OPERATION: True, GET_OPERATION: True, DETAIL_OPERATION: True}
         self.discovery_error = None
 
     def close(self) -> None:
@@ -61,13 +64,27 @@ class LoopCreateUpstream:
     def list_investigation_loops(self, request_id: str, *, limit: int = 20, offset: int = 0) -> dict:
         self.calls.append(("list", request_id, limit, offset))
         rows = [row for row in self.loops if row["base_request_id"] == request_id]
-        return {"items": rows[offset:offset + limit], "count": len(rows), "offset": offset, "limit": limit}
+        items = rows[offset:offset + limit]
+        return {
+            "items": items,
+            "count": len(items),
+            "offset": offset,
+            "limit": limit,
+            "next_offset": offset + len(items) if len(items) == limit else None,
+        }
 
     def create_investigation_loop(self, payload: dict, *, idempotency_key: str) -> dict:
         self.calls.append(("create", idempotency_key, dict(payload)))
-        self.created.append(dict(payload))
+        if idempotency_key in self.idempotent_results:
+            return dict(self.idempotent_results[idempotency_key])
         if self.create_error:
+            if self.accept_before_error:
+                self._accept_loop(payload, idempotency_key)
             raise self.create_error
+        return self._accept_loop(payload, idempotency_key)
+
+    def _accept_loop(self, payload: dict, idempotency_key: str) -> dict:
+        self.created.append(dict(payload))
         row = {
             "loop_id": f"loop-{len(self.created)}",
             "base_request_id": payload["base_request_id"],
@@ -76,6 +93,7 @@ class LoopCreateUpstream:
             "rounds_executed": 0,
         }
         self.loops.append(row)
+        self.idempotent_results[idempotency_key] = row
         return row
 
     def get_investigation_loop(self, loop_id: str) -> dict:
@@ -186,6 +204,23 @@ def test_live_create_persists_verified_ownership_and_is_idempotent(loop_create_e
     assert len([call for call in upstream.calls if call[0] == "list"]) == 1
 
 
+def test_loop_creation_reads_every_pinned_contract_page_before_post(loop_create_env) -> None:
+    client, _, upstream, _ = loop_create_env
+    _login(client)
+    upstream.loops.extend({
+        "loop_id": f"existing-{index}",
+        "base_request_id": "inv-finished",
+        "phase": "COMPLETED",
+        "strategy": "information_value",
+    } for index in range(105))
+
+    response = _submit(client, _body())
+    assert response.status_code == 201, response.text
+    list_calls = [call for call in upstream.calls if call[0] == "list"]
+    assert [call[3] for call in list_calls] == [0, 100]
+    assert len(upstream.created) == 1
+
+
 def test_same_submission_id_with_different_parameters_conflicts(loop_create_env) -> None:
     client, _, upstream, _ = loop_create_env
     _login(client)
@@ -263,7 +298,42 @@ def test_timeout_is_persisted_ambiguous_and_never_blindly_reposted(loop_create_e
     assert idempotency_key == next(call[1] for call in upstream.calls if call[0] == "create")
 
 
-def test_timeout_reconciles_a_single_new_loop_and_recovers_local_link(loop_create_env) -> None:
+def test_operator_resume_uses_same_upstream_key_to_recover_accepted_loop(loop_create_env) -> None:
+    client, settings, upstream, project_id = loop_create_env
+    _login(client)
+    upstream.create_error = AgentGuardError(0, "UPSTREAM_UNAVAILABLE", "response lost")
+    upstream.accept_before_error = True
+    body = _body()
+    first = _submit(client, body)
+    assert first.status_code == 503
+    assert first.json()["submission"]["status"] == "SUBMISSION_AMBIGUOUS"
+
+    with Session(get_engine(settings)) as session:
+        submission = session.scalar(select(InvestigationLoopSubmission))
+        assert submission is not None
+        stable_key = submission.idempotency_key
+
+    upstream.create_error = None
+    upstream.accept_before_error = False
+    resumed = client.post(
+        f"/api/investigations/inv-finished/loop-submissions/{body['submission_id']}/reconcile",
+        json={"action": "resume"},
+        headers={"X-CSRF-Token": client.cookies.get("qwb_csrf", "")},
+    )
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()["submission"]["status"] == "COMPLETED"
+    assert resumed.json()["submission"]["loop_id"] == "loop-1"
+    create_calls = [call for call in upstream.calls if call[0] == "create"]
+    assert [call[1] for call in create_calls] == [stable_key, stable_key]
+    assert create_calls[0][2] == create_calls[1][2]
+    assert len(upstream.created) == 1
+    with Session(get_engine(settings)) as session:
+        mapping = session.scalar(select(ProjectInvestigationLoop))
+        assert mapping is not None
+        assert (mapping.project_id, mapping.loop_id) == (project_id, "loop-1")
+
+
+def test_timeout_does_not_claim_a_sole_new_loop_without_submission_correlation(loop_create_env) -> None:
     client, settings, upstream, project_id = loop_create_env
     _login(client)
     upstream.create_error = AgentGuardError(0, "UPSTREAM_UNAVAILABLE", "response lost")
@@ -279,14 +349,78 @@ def test_timeout_reconciles_a_single_new_loop_and_recovers_local_link(loop_creat
         "strategy": "information_value",
     })
     recovered = _submit(client, body)
-    assert recovered.status_code == 201
-    assert recovered.json()["submission"]["status"] == "COMPLETED"
-    assert recovered.json()["submission"]["loop_id"] == "created-before-timeout"
+    assert recovered.status_code == 503
+    assert recovered.json()["submission"]["status"] == "SUBMISSION_AMBIGUOUS"
+    assert recovered.json()["submission"]["error"]["code"] == "SUBMISSION_REQUIRES_MANUAL_RECONCILIATION"
     assert len([call for call in upstream.calls if call[0] == "create"]) == 1
-    assert len([call for call in upstream.calls if call[0] == "loop_detail"]) == 1
+    assert not [call for call in upstream.calls if call[0] == "loop_detail"]
+    with Session(get_engine(settings)) as session:
+        mapping = session.scalar(select(ProjectInvestigationLoop))
+        row = session.scalar(select(InvestigationLoopSubmission))
+        assert mapping is None
+        assert row is not None and row.status == "SUBMISSION_AMBIGUOUS"
+    blocked = _submit(client, _body())
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["error"] == "BASE_LOOP_SUBMISSION_IN_PROGRESS"
+    assert project_id > 0
+
+
+def test_operator_can_audit_and_associate_a_verified_new_loop(loop_create_env) -> None:
+    client, settings, upstream, project_id = loop_create_env
+    _login(client)
+    upstream.create_error = AgentGuardError(0, "UPSTREAM_UNAVAILABLE", "response lost")
+    body = _body()
+    assert _submit(client, body).status_code == 503
+    upstream.create_error = None
+    upstream.loops.append({
+        "loop_id": "operator-selected-loop",
+        "base_request_id": "inv-finished",
+        "phase": "CREATED",
+        "strategy": "information_value",
+    })
+
+    response = client.post(
+        f"/api/investigations/inv-finished/loop-submissions/{body['submission_id']}/reconcile",
+        json={
+            "action": "associate_loop",
+            "loop_id": "operator-selected-loop",
+            "operator_note": "AgentGuard audit event AG-123 confirms the create call.",
+        },
+        headers={"X-CSRF-Token": client.cookies.get("qwb_csrf", "")},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["submission"]["status"] == "COMPLETED"
+    assert response.json()["submission"]["loop_id"] == "operator-selected-loop"
     with Session(get_engine(settings)) as session:
         mapping = session.scalar(select(ProjectInvestigationLoop))
         assert mapping is not None and mapping.project_id == project_id
+
+
+def test_operator_confirmation_of_no_creation_releases_lock_after_complete_list_check(loop_create_env) -> None:
+    client, settings, upstream, _ = loop_create_env
+    _login(client)
+    upstream.create_error = AgentGuardError(0, "UPSTREAM_UNAVAILABLE", "response lost")
+    body = _body()
+    assert _submit(client, body).status_code == 503
+    upstream.create_error = None
+
+    resolved = client.post(
+        f"/api/investigations/inv-finished/loop-submissions/{body['submission_id']}/reconcile",
+        json={
+            "action": "confirm_not_created",
+            "operator_note": "Reviewed the complete AgentGuard audit log; no create was accepted.",
+        },
+        headers={"X-CSRF-Token": client.cookies.get("qwb_csrf", "")},
+    )
+    assert resolved.status_code == 200, resolved.text
+    assert resolved.json()["submission"]["status"] == "FAILED"
+    assert resolved.json()["submission"]["error"]["code"] == "OPERATOR_CONFIRMED_NOT_CREATED"
+    with Session(get_engine(settings)) as session:
+        rows = session.scalars(select(InvestigationLoopSubmission)).all()
+        assert len(rows) == 1 and rows[0].status == "FAILED"
+
+    retry = _submit(client, _body())
+    assert retry.status_code == 201
 
 
 def test_submission_status_remains_readable_when_agentguard_is_offline(loop_create_env) -> None:

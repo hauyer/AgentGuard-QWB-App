@@ -120,7 +120,7 @@ def test_synthetic_mode_does_not_mix_or_expose_research_data(evaluation_env) -> 
     assert response.json()["detail"]["error"] == "STRATEGY_EVALUATIONS_LIVE_ONLY"
 
 
-def test_pinned_d7_without_research_routes_is_explicitly_unavailable(live_project_env) -> None:
+def test_upstream_without_research_routes_is_explicitly_unavailable(live_project_env) -> None:
     client, _settings, login = live_project_env
     login()
     response = client.get("/api/research/strategy-evaluations")

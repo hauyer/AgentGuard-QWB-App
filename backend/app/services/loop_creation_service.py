@@ -20,6 +20,7 @@ from app.models.app import (
     ProjectInvestigation,
     ProjectInvestigationLoop,
 )
+from app.services.loop_contract import LoopListContractError, read_all_investigation_loops
 
 
 class LoopCreationError(RuntimeError):
@@ -193,6 +194,9 @@ def resume_submission(
         )
         if row is None:
             raise LoopCreationError(404, "SUBMISSION_NOT_FOUND", "未找到该 Loop 提交记录")
+        row_id = row.id
+        status = row.status
+        actor = row.created_by
         upstream_payload = json.loads(row.request_payload)
     except SQLAlchemyError as exc:
         raise LoopCreationError(503, "SUBMISSION_STORAGE_UNAVAILABLE", "Loop 提交状态暂不可用") from exc
@@ -200,15 +204,140 @@ def resume_submission(
         raise LoopCreationError(503, "SUBMISSION_STATE_INVALID", "保存的 Loop 请求无法恢复") from exc
     finally:
         session.close()
+    if status in {"COMPLETED", "FAILED"}:
+        return LoopCreationResult(200, _public_payload(_load_submission(settings, row_id)))
+    if status == "LINK_PENDING":
+        return _complete_pending_link(settings, row_id)
+    if status in {"SUBMITTING", "SUBMISSION_AMBIGUOUS"}:
+        return _retry_ambiguous_with_idempotency(settings, client, row_id)
+    if status != "PREPARED":
+        raise LoopCreationError(409, "SUBMISSION_STATE_INVALID", "该提交当前不能恢复")
     return submit_loop(
         settings,
         client,
         project_id=project_id,
         request_id=request_id,
         submission_id=submission_id,
-        actor=row.created_by,
+        actor=actor,
         upstream_payload=upstream_payload,
     )
+
+
+def manually_reconcile_submission(
+    settings: Settings,
+    client: AgentGuardClient,
+    *,
+    project_id: int,
+    request_id: str,
+    submission_id: str,
+    actor: str,
+    action: str,
+    loop_id: str | None = None,
+    operator_note: str | None = None,
+) -> LoopCreationResult:
+    """Resolve an ambiguous POST only with an explicit operator choice.
+
+    A selected loop must be a new item in the complete upstream list and its
+    detail must match both identities. Confirming no creation is allowed only
+    when the complete list still equals the saved pre-POST baseline.
+    """
+    session = _open_session(settings)
+    try:
+        row = session.scalar(
+            select(InvestigationLoopSubmission).where(
+                InvestigationLoopSubmission.project_id == project_id,
+                InvestigationLoopSubmission.base_request_id == request_id,
+                InvestigationLoopSubmission.submission_id == submission_id,
+            )
+        )
+        if row is None:
+            raise LoopCreationError(404, "SUBMISSION_NOT_FOUND", "未找到该 Loop 提交记录")
+        row_id = row.id
+        status = row.status
+        baseline_json = row.baseline_loop_ids
+    except SQLAlchemyError as exc:
+        raise LoopCreationError(503, "SUBMISSION_STORAGE_UNAVAILABLE", "Loop 提交状态暂不可用") from exc
+    finally:
+        session.close()
+
+    if status in {"COMPLETED", "FAILED"}:
+        return LoopCreationResult(200, _public_payload(_load_submission(settings, row_id)))
+    if status == "LINK_PENDING":
+        return _complete_pending_link(settings, row_id)
+    if action == "resume":
+        if status != "PREPARED":
+            return _retry_ambiguous_with_idempotency(settings, client, row_id)
+        return resume_submission(
+            settings,
+            client,
+            project_id=project_id,
+            request_id=request_id,
+            submission_id=submission_id,
+        )
+    if status not in {"SUBMITTING", "SUBMISSION_AMBIGUOUS", "LINK_PENDING"}:
+        raise LoopCreationError(409, "SUBMISSION_STATE_INVALID", "该提交当前不需要人工对账")
+    if not baseline_json:
+        raise LoopCreationError(409, "SUBMISSION_BASELINE_MISSING", "缺少完整的提交前 Loop 基线，不能人工解除")
+
+    baseline_ids = set(json.loads(baseline_json))
+    try:
+        current_ids = _read_all_loop_ids(client, request_id)
+    except (AgentGuardError, LoopCreationError) as exc:
+        raise LoopCreationError(
+            503,
+            "RECONCILIATION_UNAVAILABLE",
+            "无法读取完整的 AgentGuard Loop 列表；提交仍保持锁定",
+        ) from exc
+
+    new_ids = set(current_ids) - baseline_ids
+    if action == "confirm_not_created":
+        if status != "SUBMISSION_AMBIGUOUS":
+            raise LoopCreationError(
+                409,
+                "SUBMISSION_STILL_RUNNING",
+                "提交仍在执行中，暂时不能确认上游未创建",
+            )
+        if new_ids:
+            raise LoopCreationError(
+                409,
+                "NEW_LOOPS_REQUIRE_REVIEW",
+                "上游出现了提交前不存在的 Loop；请核实后选择关联项，不能确认未创建",
+            )
+        _set_failure(
+            settings,
+            row_id,
+            status="FAILED",
+            error_code="OPERATOR_CONFIRMED_NOT_CREATED",
+            error_message=f"Operator {actor} 核对后确认未创建；记录：{operator_note or ''}",
+            error_status_code=409,
+            expected_statuses={"SUBMISSION_AMBIGUOUS"},
+        )
+        return LoopCreationResult(200, _public_payload(_load_submission(settings, row_id)))
+
+    if action != "associate_loop" or not loop_id:
+        raise LoopCreationError(422, "INVALID_RECONCILIATION_ACTION", "需要选择关联 Loop 或确认上游未创建")
+    if loop_id not in new_ids:
+        raise LoopCreationError(
+            409,
+            "LOOP_NOT_A_NEW_CANDIDATE",
+            "所选 Loop 不在本次提交前的完整基线之外，未建立归属",
+        )
+    try:
+        detail = client.get_investigation_loop(loop_id)
+    except AgentGuardError as exc:
+        raise LoopCreationError(
+            exc.status_code or 503,
+            exc.code or "RECONCILIATION_DETAIL_UNAVAILABLE",
+            "无法读取所选 Loop 详情；提交仍保持待核对",
+        ) from exc
+    if detail.get("loop_id") != loop_id or detail.get("base_request_id") != request_id:
+        raise LoopCreationError(
+            409,
+            "RECONCILIATION_IDENTITY_MISMATCH",
+            "所选 Loop 的上游身份不匹配，未建立归属",
+        )
+    _store_upstream_result(settings, row_id, loop_id, detail)
+    return _complete_pending_link(settings, row_id)
 
 
 def _create_or_load_submission(
@@ -260,7 +389,26 @@ def _create_or_load_submission(
                 InvestigationLoopSubmission.submission_id == submission_id,
             )
         )
-        if row is None or row.base_request_id != request_id or row.request_fingerprint != fingerprint:
+        if row is not None and (row.base_request_id != request_id or row.request_fingerprint != fingerprint):
+            raise LoopCreationError(
+                409, "SUBMISSION_IDEMPOTENCY_CONFLICT", "Loop 提交发生并发冲突"
+            ) from None
+        if row is None:
+            active = session.scalar(
+                select(InvestigationLoopSubmission).where(
+                    InvestigationLoopSubmission.project_id == project_id,
+                    InvestigationLoopSubmission.base_request_id == request_id,
+                    InvestigationLoopSubmission.status.in_(
+                        {"PREPARED", "SUBMITTING", "SUBMISSION_AMBIGUOUS", "LINK_PENDING"}
+                    ),
+                )
+            )
+            if active is not None:
+                raise LoopCreationError(
+                    409,
+                    "BASE_LOOP_SUBMISSION_IN_PROGRESS",
+                    "该基础调查已有尚未完成或待对账的 Loop 提交",
+                ) from None
             raise LoopCreationError(
                 409, "SUBMISSION_IDEMPOTENCY_CONFLICT", "Loop 提交发生并发冲突"
             ) from None
@@ -274,42 +422,11 @@ def _create_or_load_submission(
 
 
 def _read_all_loop_ids(client: AgentGuardClient, request_id: str) -> list[str]:
-    all_items: list[dict[str, Any]] = []
-    offset = 0
-    expected_count: int | None = None
-    page_size = 100
-    for _ in range(20):
-        payload = client.list_investigation_loops(request_id, limit=page_size, offset=offset)
-        items = payload.get("items") if isinstance(payload, dict) else None
-        count = payload.get("count") if isinstance(payload, dict) else None
-        if not isinstance(items, list) or isinstance(count, bool) or not isinstance(count, int) or count < 0:
-            raise LoopCreationError(502, "INVALID_UPSTREAM_CONTRACT", "AgentGuard Loop 列表无法用于安全对账")
-        if expected_count is None:
-            expected_count = count
-        elif expected_count != count:
-            raise LoopCreationError(503, "LOOP_LIST_CHANGED_DURING_READ", "Loop 列表分页期间发生变化，提交未发送")
-        for item in items:
-            if (
-                not isinstance(item, dict)
-                or not isinstance(item.get("loop_id"), str)
-                or not item["loop_id"]
-                or item.get("base_request_id") != request_id
-            ):
-                raise LoopCreationError(502, "INVALID_UPSTREAM_CONTRACT", "AgentGuard Loop 列表身份字段不完整")
-            all_items.append(item)
-        offset += len(items)
-        if offset >= expected_count:
-            break
-        if not items:
-            raise LoopCreationError(502, "INVALID_UPSTREAM_CONTRACT", "AgentGuard Loop 列表分页不完整")
-    else:
-        raise LoopCreationError(503, "LOOP_RECONCILIATION_LIMIT", "Loop 数量超过安全对账上限，提交未发送")
-    ids = [item["loop_id"] for item in all_items]
-    if len(ids) != len(set(ids)):
-        raise LoopCreationError(502, "INVALID_UPSTREAM_CONTRACT", "AgentGuard Loop 列表包含重复 ID")
-    if expected_count != len(ids):
-        raise LoopCreationError(503, "LOOP_LIST_INCOMPLETE", "AgentGuard Loop 列表不完整，提交未发送")
-    return ids
+    try:
+        items = read_all_investigation_loops(client, request_id)
+    except LoopListContractError as exc:
+        raise LoopCreationError(exc.status_code, exc.code, str(exc)) from exc
+    return [item["loop_id"] for item in items]
 
 
 def _persist_baseline(settings: Settings, row_id: int, baseline_ids: list[str]) -> None:
@@ -356,56 +473,87 @@ def _reconcile_ambiguous(
     client: AgentGuardClient,
     row_id: int,
 ) -> LoopCreationResult:
+    # Repeated browser submissions do not trigger another POST. An Operator
+    # must explicitly resume through the upstream's stable idempotency key or
+    # resolve the record with audit evidence.
+    _set_failure(
+        settings,
+        row_id,
+        status="SUBMISSION_AMBIGUOUS",
+        error_code="SUBMISSION_REQUIRES_MANUAL_RECONCILIATION",
+        error_message=(
+            "上游没有返回可验证的本次提交关联标识；为避免错误认领或重复执行，"
+            "该基础调查的后续 Loop 创建已暂停，请由 Operator 核查并对账"
+        ),
+        error_status_code=503,
+    )
+    return LoopCreationResult(503, _public_payload(_load_submission(settings, row_id)))
+
+
+def _retry_ambiguous_with_idempotency(
+    settings: Settings,
+    client: AgentGuardClient,
+    row_id: int,
+) -> LoopCreationResult:
+    """Ask AgentGuard for the result using the exact persisted key and body.
+
+    I7 guarantees that the same key and payload returns the registered Loop;
+    this explicit Operator action therefore cannot create a second Loop. The
+    client itself still never retries POST requests automatically.
+    """
     row = _load_submission(settings, row_id)
-    if not row.baseline_loop_ids:
-        _set_failure(
-            settings, row_id, status="SUBMISSION_AMBIGUOUS",
-            error_code="SUBMISSION_REQUIRES_MANUAL_RECONCILIATION",
-            error_message="提交开始前未能保存完整对账基线；为避免重复执行，请由管理员核查 AgentGuard",
-            error_status_code=503,
-        )
-        return LoopCreationResult(503, _public_payload(_load_submission(settings, row_id)))
+    if row.status == "COMPLETED":
+        return LoopCreationResult(200, _public_payload(row))
+    if row.status == "LINK_PENDING":
+        return _complete_pending_link(settings, row_id)
+    if row.status not in {"SUBMITTING", "SUBMISSION_AMBIGUOUS"}:
+        raise LoopCreationError(409, "SUBMISSION_STATE_INVALID", "该提交当前不需要幂等恢复")
+
     try:
-        current_ids = _read_all_loop_ids(client, row.base_request_id)
-    except Exception as exc:  # read-only reconciliation may be retried later
+        stored_payload = json.loads(row.request_payload)
+        upstream_result = client.create_investigation_loop(
+            stored_payload,
+            idempotency_key=row.idempotency_key,
+        )
+    except (AgentGuardError, json.JSONDecodeError) as exc:
+        code = exc.code if isinstance(exc, AgentGuardError) else "SUBMISSION_STATE_INVALID"
+        message = str(exc) if isinstance(exc, AgentGuardError) else "保存的 Loop 请求无法恢复"
         _set_failure(
-            settings, row_id, status="SUBMISSION_AMBIGUOUS",
-            error_code="RECONCILIATION_UNAVAILABLE",
-            error_message=(str(exc) if isinstance(exc, (AgentGuardError, LoopCreationError))
-                           else "无法读取上游 Loop 列表"),
+            settings,
+            row_id,
+            status="SUBMISSION_AMBIGUOUS",
+            error_code=code or "UPSTREAM_RESULT_UNKNOWN",
+            error_message=message,
             error_status_code=503,
+            expected_statuses={"SUBMITTING", "SUBMISSION_AMBIGUOUS"},
         )
         return LoopCreationResult(503, _public_payload(_load_submission(settings, row_id)))
-    baseline_ids = set(json.loads(row.baseline_loop_ids))
-    new_ids = set(current_ids) - baseline_ids
-    if len(new_ids) != 1:
+
+    loop_id = upstream_result.get("loop_id") if isinstance(upstream_result, dict) else None
+    base_request_id = upstream_result.get("base_request_id") if isinstance(upstream_result, dict) else None
+    if (
+        not isinstance(loop_id, str)
+        or not loop_id
+        or loop_id.strip() != loop_id
+        or len(loop_id) > 256
+        or base_request_id != row.base_request_id
+    ):
         _set_failure(
-            settings, row_id, status="SUBMISSION_AMBIGUOUS",
-            error_code="SUBMISSION_REQUIRES_MANUAL_RECONCILIATION",
-            error_message="无法唯一匹配本次创建结果；没有自动重发，请由管理员核查 AgentGuard",
+            settings,
+            row_id,
+            status="SUBMISSION_AMBIGUOUS",
+            error_code="INVALID_UPSTREAM_IDENTITY",
+            error_message="AgentGuard 幂等恢复未返回匹配的 Loop 身份；提交仍待核对",
             error_status_code=503,
+            expected_statuses={"SUBMITTING", "SUBMISSION_AMBIGUOUS"},
         )
         return LoopCreationResult(503, _public_payload(_load_submission(settings, row_id)))
-    loop_id = next(iter(new_ids))
-    try:
-        loop_payload = client.get_investigation_loop(loop_id)
-    except AgentGuardError as exc:
-        _set_failure(
-            settings, row_id, status="SUBMISSION_AMBIGUOUS",
-            error_code="RECONCILIATION_DETAIL_UNAVAILABLE",
-            error_message=str(exc), error_status_code=503,
-        )
-        return LoopCreationResult(503, _public_payload(_load_submission(settings, row_id)))
-    if loop_payload.get("loop_id") != loop_id or loop_payload.get("base_request_id") != row.base_request_id:
-        _set_failure(
-            settings, row_id, status="SUBMISSION_AMBIGUOUS",
-            error_code="RECONCILIATION_IDENTITY_MISMATCH",
-            error_message="上游 Loop 详情身份不匹配；需要管理员核查",
-            error_status_code=503,
-        )
-        return LoopCreationResult(503, _public_payload(_load_submission(settings, row_id)))
-    _store_upstream_result(settings, row_id, loop_id, loop_payload)
-    return _complete_pending_link(settings, row_id)
+
+    _store_upstream_result(settings, row_id, loop_id, upstream_result)
+    linked = _complete_pending_link(settings, row_id)
+    if linked.status_code == 201:
+        return LoopCreationResult(200, linked.payload)
+    return linked
 
 
 def _store_upstream_result(settings: Settings, row_id: int, loop_id: str, payload: dict[str, Any]) -> None:
@@ -461,7 +609,7 @@ def _complete_pending_link(settings: Settings, row_id: int) -> LoopCreationResul
                 or base_rows[0].verification_source != "live"
             ):
                 row.error_code = "INVESTIGATION_OWNERSHIP_CONFLICT"
-                row.error_message = "基础调查项目归属已变化；Loop 已创建但需要管理员对账"
+                row.error_message = "基础调查项目归属已变化；Loop 已创建但需要 Operator 对账"
                 row.error_status_code = 409
                 row.updated_at = datetime.now(UTC)
                 return LoopCreationResult(409, _public_payload(row))
@@ -478,7 +626,7 @@ def _complete_pending_link(settings: Settings, row_id: int) -> LoopCreationResul
                 ))
             elif existing.project_id != row.project_id or existing.base_request_id != row.base_request_id:
                 row.error_code = "LOOP_OWNERSHIP_CONFLICT"
-                row.error_message = "该 Loop 已关联其他项目或基础调查；需要管理员对账"
+                row.error_message = "该 Loop 已关联其他项目或基础调查；需要 Operator 对账"
                 row.error_status_code = 409
                 row.updated_at = datetime.now(UTC)
                 return LoopCreationResult(409, _public_payload(row))
@@ -496,7 +644,7 @@ def _complete_pending_link(settings: Settings, row_id: int) -> LoopCreationResul
         if row is not None and row.status == "COMPLETED":
             return LoopCreationResult(200, _public_payload(row))
         raise LoopCreationError(
-            409, "LOOP_OWNERSHIP_CONFLICT", "Loop 归属写入发生并发冲突；需要管理员对账"
+            409, "LOOP_OWNERSHIP_CONFLICT", "Loop 归属写入发生并发冲突；需要 Operator 对账"
         ) from exc
     except SQLAlchemyError as exc:
         raise LoopCreationError(503, "LINK_PENDING", "Loop 已在 AgentGuard 创建，本地归属尚待恢复") from exc
@@ -512,12 +660,15 @@ def _set_failure(
     error_code: str,
     error_message: str,
     error_status_code: int,
+    expected_statuses: set[str] | None = None,
 ) -> None:
     session = _open_session(settings)
     try:
         with session.begin():
             row = session.get(InvestigationLoopSubmission, row_id)
-            if row is not None:
+            if row is not None and row.status != "COMPLETED":
+                if expected_statuses is not None and row.status not in expected_statuses:
+                    return
                 row.status = status
                 row.error_code = error_code[:64]
                 row.error_message = error_message[:4000]

@@ -564,7 +564,7 @@ def create_stub_app(
             }
 
         @app.get("/v1/investigation-loops")
-        def report_list_loops(base_request_id: str, limit: int = 20, offset: int = 0) -> dict:
+        def report_list_loops(base_request_id: str, limit: int = 50, offset: int = 0) -> dict:
             items = []
             if base_request_id == "inv-stub-0001":
                 items = [{
@@ -584,8 +584,15 @@ def create_stub_app(
                     "rounds_executed": 1,
                     "stop_reason": "BUDGET_EXHAUSTED",
                 }]
-            return {"schema_version": "1.0", "items": items, "count": len(items),
-                    "limit": limit, "offset": offset}
+            page = items[offset:offset + limit]
+            return {
+                "schema_version": "1.0",
+                "items": page,
+                "count": len(page),
+                "limit": limit,
+                "offset": offset,
+                "next_offset": offset + len(page) if len(page) == limit else None,
+            }
 
         @app.get("/v1/investigation-loops/{loop_id}")
         def report_get_loop(loop_id: str) -> dict:

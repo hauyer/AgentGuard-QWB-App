@@ -30,8 +30,19 @@ APP_SECRET = "j2-loop-ownership-secret-key-0123456789"
 class LoopUpstream:
     def __init__(self) -> None:
         self.calls: list[tuple] = []
-        self.list_response: dict = {"items": [], "count": 0, "offset": 0, "limit": 20}
+        self.list_response: dict = {
+            "items": [], "count": 0, "offset": 0, "limit": 100, "next_offset": None,
+        }
+        self.list_pages: dict[int, dict] = {}
         self.list_error: AgentGuardError | None = None
+        self.discovery_error = None
+        self.operations = {
+            "GET /v1/investigation-loops": True,
+            "GET /v1/investigation-loops/{loop_id}": True,
+            "GET /v1/investigation-loops/{loop_id}/decisions": True,
+            "GET /v1/investigation-loops/{loop_id}/evidence-changes": True,
+            "GET /v1/investigation-loops/{loop_id}/budget": True,
+        }
 
     def close(self) -> None:
         return
@@ -40,11 +51,17 @@ class LoopUpstream:
         self.calls.append(("health",))
         return {"status": "ok"}
 
-    def list_investigation_loops(self, base_request_id: str) -> dict:
-        self.calls.append(("list", base_request_id))
+    def discover_operations(self) -> dict[str, bool]:
+        self.calls.append(("discover",))
+        return self.operations
+
+    def list_investigation_loops(
+        self, base_request_id: str, *, limit: int = 50, offset: int = 0,
+    ) -> dict:
+        self.calls.append(("list", base_request_id, limit, offset))
         if self.list_error:
             raise self.list_error
-        return self.list_response
+        return self.list_pages.get(offset, self.list_response)
 
     def get_investigation_loop(self, loop_id: str) -> dict:
         self.calls.append(("detail", loop_id))
@@ -117,7 +134,9 @@ def mapped_loops(settings) -> list[ProjectInvestigationLoop]:
 def test_authorized_list_registers_mapping_and_detail_uses_same_loop(loop_env) -> None:
     client, settings, upstream, project_a_id, _ = loop_env
     login(client)
-    upstream.list_response = {"items": [loop()], "count": 1, "offset": 0, "limit": 20}
+    upstream.list_response = {
+        "items": [loop()], "count": 1, "offset": 0, "limit": 100, "next_offset": None,
+    }
 
     listed = client.get("/api/investigations/inv-a/loops")
     assert listed.status_code == 200
@@ -141,13 +160,68 @@ def test_empty_list_succeeds_without_creating_mapping(loop_env) -> None:
     assert response.status_code == 200
     assert response.json()["items"] == []
     assert mapped_loops(settings) == []
-    assert ("list", "inv-a") in upstream.calls
+    assert any(call[:2] == ("list", "inv-a") for call in upstream.calls)
+
+
+def test_complete_multi_page_list_registers_all_loops_before_enabling_detail(loop_env) -> None:
+    client, settings, upstream, project_a_id, _ = loop_env
+    login(client)
+    first_page = [loop(f"loop-{index}") for index in range(100)]
+    last_page = [loop("loop-100")]
+    upstream.list_pages = {
+        0: {"items": first_page, "count": 100, "offset": 0, "limit": 100, "next_offset": 100},
+        100: {"items": last_page, "count": 1, "offset": 100, "limit": 100, "next_offset": None},
+    }
+
+    listed = client.get("/api/investigations/inv-a/loops")
+    assert listed.status_code == 200
+    assert listed.json()["count"] == 101
+    assert len(listed.json()["items"]) == 101
+    assert [call[3] for call in upstream.calls if call[0] == "list"] == [0, 100]
+    rows = mapped_loops(settings)
+    assert len(rows) == 101
+    assert all(row.project_id == project_a_id for row in rows)
+
+    detail = client.get("/api/investigation-loops/loop-100")
+    assert detail.status_code == 200
+    assert ("detail", "loop-100") in upstream.calls
+
+
+def test_invalid_loop_pagination_fails_before_any_ownership_write(loop_env) -> None:
+    client, settings, upstream, *_ = loop_env
+    login(client)
+    upstream.list_response = {
+        "items": [loop("loop-a")],
+        "count": 1,
+        "offset": 0,
+        "limit": 100,
+        "next_offset": 100,
+    }
+
+    response = client.get("/api/investigations/inv-a/loops")
+    assert response.status_code == 502
+    assert response.json()["detail"]["error"] == "INVALID_UPSTREAM_CONTRACT"
+    assert mapped_loops(settings) == []
+
+
+def test_loop_list_requires_the_complete_read_surface(loop_env) -> None:
+    client, settings, upstream, *_ = loop_env
+    login(client)
+    upstream.operations["GET /v1/investigation-loops/{loop_id}/budget"] = False
+
+    response = client.get("/api/investigations/inv-a/loops")
+    assert response.status_code == 503
+    assert response.json()["detail"]["error"] == "LOOP_READ_UNSUPPORTED"
+    assert not any(call[0] == "list" for call in upstream.calls)
+    assert mapped_loops(settings) == []
 
 
 def test_repeated_list_registration_is_idempotent_and_survives_engine_restart(loop_env) -> None:
     client, settings, upstream, *_ = loop_env
     login(client)
-    upstream.list_response = {"items": [loop()], "count": 1, "offset": 0, "limit": 20}
+    upstream.list_response = {
+        "items": [loop()], "count": 1, "offset": 0, "limit": 100, "next_offset": None,
+    }
     assert client.get("/api/investigations/inv-a/loops").status_code == 200
     assert client.get("/api/investigations/inv-a/loops").status_code == 200
     assert len(mapped_loops(settings)) == 1
@@ -159,8 +233,10 @@ def test_repeated_list_registration_is_idempotent_and_survives_engine_restart(lo
 def test_base_request_mismatch_rejects_list_without_writing(loop_env) -> None:
     client, settings, upstream, *_ = loop_env
     login(client)
-    upstream.list_response = {"items": [loop(base_request_id="inv-other")],
-                              "count": 1, "offset": 0, "limit": 20}
+    upstream.list_response = {
+        "items": [loop(base_request_id="inv-other")], "count": 1,
+        "offset": 0, "limit": 100, "next_offset": None,
+    }
     response = client.get("/api/investigations/inv-a/loops")
     assert response.status_code == 502
     assert response.json()["detail"]["error"] == "INVALID_UPSTREAM_CONTRACT"
@@ -170,8 +246,10 @@ def test_base_request_mismatch_rejects_list_without_writing(loop_env) -> None:
 def test_missing_identity_fields_rejects_upstream_contract(loop_env) -> None:
     client, settings, upstream, *_ = loop_env
     login(client)
-    upstream.list_response = {"items": [{"loop_id": "loop-a"}],
-                              "count": 1, "offset": 0, "limit": 20}
+    upstream.list_response = {
+        "items": [{"loop_id": "loop-a"}], "count": 1,
+        "offset": 0, "limit": 100, "next_offset": None,
+    }
     response = client.get("/api/investigations/inv-a/loops")
     assert response.status_code == 502
     assert response.json()["detail"]["error"] == "INVALID_UPSTREAM_CONTRACT"
@@ -219,7 +297,7 @@ def test_loop_already_owned_by_another_project_rolls_back_whole_registration(loo
     login(client)
     upstream.list_response = {
         "items": [loop("loop-new"), loop("loop-conflict")],
-        "count": 2, "offset": 0, "limit": 20,
+        "count": 2, "offset": 0, "limit": 100, "next_offset": None,
     }
     response = client.get("/api/investigations/inv-a/loops")
     assert response.status_code == 409
@@ -230,7 +308,9 @@ def test_loop_already_owned_by_another_project_rolls_back_whole_registration(loo
 def test_database_write_failure_returns_503_without_claiming_success(loop_env, monkeypatch) -> None:
     client, settings, upstream, *_ = loop_env
     login(client)
-    upstream.list_response = {"items": [loop()], "count": 1, "offset": 0, "limit": 20}
+    upstream.list_response = {
+        "items": [loop()], "count": 1, "offset": 0, "limit": 100, "next_offset": None,
+    }
     original_open_session = resource_access.open_session
     calls = 0
 

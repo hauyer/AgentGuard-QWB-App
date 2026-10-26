@@ -11,12 +11,15 @@ from fastapi.responses import JSONResponse
 from app.api.deps import require_role, require_role_csrf
 from app.core.data_mode import DataMode
 from app.integrations.agentguard_client import AgentGuardClient, AgentGuardError
-from app.schemas.investigation_loops import CreateInvestigationLoopRequest
+from app.schemas.investigation_loops import (
+    CreateInvestigationLoopRequest,
+    ReconcileInvestigationLoopSubmissionRequest,
+)
 from app.services import resource_access
 from app.services.loop_creation_service import (
     LoopCreationError,
     get_submission,
-    resume_submission,
+    manually_reconcile_submission,
     submit_loop,
 )
 from app.services.project_service import ProjectServiceError, require_project_access
@@ -80,7 +83,8 @@ def _result_response(result) -> JSONResponse:
 
 
 def _audit(request: Request, user: object, *, action: str, request_id: str, project_id: int | None,
-           outcome: str, submission_id: str | None = None, error_code: str | None = None) -> None:
+           outcome: str, submission_id: str | None = None, error_code: str | None = None,
+           operator_note: str | None = None) -> None:
     audit = getattr(request.app.state, "audit_service", None)
     if audit is None:
         return
@@ -89,6 +93,8 @@ def _audit(request: Request, user: object, *, action: str, request_id: str, proj
         detail += f" submission_id={submission_id}"
     if error_code:
         detail += f" error={error_code}"
+    if operator_note:
+        detail += f" operator_note={operator_note[:500]}"
     audit.record(
         actor=user.username,
         role=user.role,
@@ -144,7 +150,7 @@ def create_loop(
             raise LoopCreationError(
                 503,
                 "LOOP_CREATE_UNSUPPORTED",
-                "当前固定的 AgentGuard D7 版本未发布 Loop 创建接口；没有发送创建请求",
+                "当前固定的 AgentGuard 版本未发布 Loop 创建接口；没有发送创建请求",
             )
         if not operations.get("GET /v1/investigation-loops", False):
             raise LoopCreationError(
@@ -237,6 +243,7 @@ def reconcile_loop_submission(
     request: Request,
     request_id: str,
     submission_id: UUID,
+    body: ReconcileInvestigationLoopSubmissionRequest,
     user: OperatorCsrf,
 ) -> JSONResponse:
     project_id: int | None = None
@@ -253,30 +260,42 @@ def reconcile_loop_submission(
         if current is None:
             raise LoopCreationError(404, "SUBMISSION_NOT_FOUND", "未找到该 Loop 提交记录")
         client = _client(request)
-        operations = client.discover_operations()
-        if getattr(client, "discovery_error", None):
-            raise LoopCreationError(503, "LOOP_RECONCILIATION_UNAVAILABLE", "无法确认上游恢复能力")
-        if not operations.get("GET /v1/investigation-loops", False):
-            raise LoopCreationError(503, "LOOP_RECONCILIATION_UNSUPPORTED", "AgentGuard 未发布 Loop 对账接口")
-        if current["submission"]["status"] == "PREPARED":
-            if not settings.agentguard_operator_api_token or not settings.agentguard_operator_api_token.strip():
-                raise LoopCreationError(503, "OPERATOR_TOKEN_REQUIRED", "服务端未配置 AgentGuard Operator Token")
-            if not operations.get("POST /v1/investigation-loops", False):
-                # A PREPARED record proves no POST was ever claimed, but this
-                # fixed upstream still must publish create before it can resume.
-                raise LoopCreationError(503, "LOOP_CREATE_UNSUPPORTED", "当前 AgentGuard 固定版本不支持恢复 Loop 创建")
-        result = resume_submission(
+        current_status = current["submission"]["status"]
+        if current_status not in {"COMPLETED", "FAILED", "LINK_PENDING"}:
+            operations = client.discover_operations()
+            if getattr(client, "discovery_error", None):
+                raise LoopCreationError(503, "LOOP_RECONCILIATION_UNAVAILABLE", "无法确认上游恢复能力")
+            if body.action == "resume":
+                if not settings.agentguard_operator_api_token or not settings.agentguard_operator_api_token.strip():
+                    raise LoopCreationError(503, "OPERATOR_TOKEN_REQUIRED", "服务端未配置 AgentGuard Operator Token")
+                if not operations.get("POST /v1/investigation-loops", False):
+                    raise LoopCreationError(
+                        503, "LOOP_CREATE_UNSUPPORTED", "当前 AgentGuard 固定版本不支持恢复 Loop 创建"
+                    )
+            else:
+                if not operations.get("GET /v1/investigation-loops", False):
+                    raise LoopCreationError(503, "LOOP_RECONCILIATION_UNSUPPORTED", "AgentGuard 未发布 Loop 对账接口")
+                if body.action == "associate_loop" and not operations.get(
+                    "GET /v1/investigation-loops/{loop_id}", False
+                ):
+                    raise LoopCreationError(503, "LOOP_DETAIL_UNSUPPORTED", "AgentGuard 未发布 Loop 详情核对接口")
+        result = manually_reconcile_submission(
             settings,
             client,
             project_id=project_id,
             request_id=request_id,
             submission_id=key,
+            actor=user.username,
+            action=body.action,
+            loop_id=body.loop_id,
+            operator_note=body.operator_note,
         )
         _audit(
             request, user, action="investigation.loop.reconcile", request_id=request_id,
             project_id=project_id, outcome=result.payload.get("submission", {}).get("status", "unknown"),
             submission_id=key,
             error_code=(result.payload.get("submission", {}).get("error") or {}).get("code"),
+            operator_note=body.operator_note,
         )
         return _result_response(result)
     except resource_access.AccessDenied as exc:

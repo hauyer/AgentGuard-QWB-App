@@ -1,12 +1,11 @@
 """Unified AgentGuard API client (BFF connector).
 
-Contract baseline (B20): AgentGuard commit 3c34931f983b545c77ee79f866425eb63053807b
-(feature/d-real-investigation, "Complete release acceptance with security review
-and research suite (D7)", 1.1.0rc1). D-round adds layered readiness, real
-investigation options, request_id-scoped timeline, report listing and the E1
-findings/hypotheses APIs; capability discovery below guards every tracked
-operation so older pins degrade explicitly. Prior baselines: 907aa19 (C2),
-7d42809 (A8).
+Contract baseline (I7): AgentGuard commit cd3e9f3f26504f74f347656e97913f55c5db8b4a
+(feature/i-reliability-and-live-validation, API source 66dae883fb75cf90ef735b94d2f5c9b565ba5ad3,
+1.1.0rc1; 84 OpenAPI paths). It includes persisted investigation loops and
+strategy evaluation records. Capability discovery below guards every tracked
+operation so deployments on older pins degrade explicitly. Prior baselines:
+3c34931 (D7), 907aa19 (C2), 7d42809 (A8).
 
 Safety rules enforced here (mirror the upstream SDK contract):
   * upstream origin is fixed by server config; callers cannot choose arbitrary hosts
@@ -313,7 +312,7 @@ class AgentGuardClient:
         return self.request("GET", f"/v1/runs/{_quote(run_id)}/timeline")
 
     # ------------------------------------------------------------------ #
-    # D-round capabilities (published at pinned commit 3c34931 / 1.1.0rc1)
+    # D-round capabilities retained by the pinned I7 API / 1.1.0rc1
     # ------------------------------------------------------------------ #
     def get_readiness(self) -> dict[str, Any]:
         """Layered readiness checks (agentguard_api / warden_connectivity /
@@ -326,7 +325,7 @@ class AgentGuardClient:
         return self.request("GET", "/v1/investigations/options")
 
     def get_investigation_timeline(self, request_id: str) -> dict[str, Any]:
-        """Persisted investigation timeline (D7 published the request_id form)."""
+        """Persisted investigation timeline keyed by the base request id."""
         return self.request("GET", f"/v1/investigations/{_quote(request_id)}/timeline")
 
     def list_reports(self, *, limit: int = 50, offset: int = 0) -> dict[str, Any]:
@@ -371,8 +370,8 @@ class AgentGuardClient:
         """E6 risk analysis summary for a base investigation."""
         return self.request("GET", f"/v1/investigations/{_quote(request_id)}/risk-analysis")
 
-    def list_investigation_loops(self, base_request_id: str, *, limit: int = 20, offset: int = 0) -> dict[str, Any]:
-        """E6 list investigation loops filtered by base_request_id."""
+    def list_investigation_loops(self, base_request_id: str, *, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        """List the persisted loop registry; count is page-scoped in I7."""
         return self.request(
             "GET", "/v1/investigation-loops",
             query={"base_request_id": base_request_id, "limit": limit, "offset": offset})
