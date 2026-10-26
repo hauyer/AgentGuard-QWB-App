@@ -3,9 +3,9 @@
   "pinned_agentguard": {
     "repository": "https://github.com/hauyer/AgentGuard",
     "branch": "feature/i-reliability-and-live-validation",
-    "commit": "cd3e9f3f26504f74f347656e97913f55c5db8b4a",
-    "commit_short": "cd3e9f3",
-    "commit_subject": "docs: document loop contract and WARDEN live gate",
+    "commit": "8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25",
+    "commit_short": "8a7c154",
+    "commit_subject": "Harden WARDEN reconciliation and loop budgets",
     "api_source_commit": "66dae883fb75cf90ef735b94d2f5c9b565ba5ad3",
     "pinned_at": "2026-10-26",
     "previous_pin": "3c34931f983b545c77ee79f866425eb63053807b (D7, branch feature/d-real-investigation)",
@@ -14,7 +14,7 @@
   },
   "openapi": {
     "path_count": 84,
-    "sha256_file": "b7c4e197ffa53531308102bddc40dda5a31bda8be81b816ecb8ddfa19e40b211",
+    "sha256_file": "d577e6001883ada17d47f195cafe48c5394e46c5f16f587636eb907a1e1aa78e",
     "sha256_canonical_json": "e2d6d9bd7cf94441fa508b34af922b8da7cf724778ff62d10b728367a93c3c9f",
     "verified_at": "2026-10-26",
     "snapshot": "integration-data/agentguard-openapi-cd3e9f3.json",
@@ -22,9 +22,9 @@
   },
   "upstream_ci": {
     "workflow": "AgentGuard CI",
-    "run_id": 40209003277,
-    "run_url": "https://github.com/hauyer/AgentGuard/actions/runs/40209003277",
-    "commit": "cd3e9f3f26504f74f347656e97913f55c5db8b4a",
+    "run_id": 40265747910,
+    "run_url": "https://github.com/hauyer/AgentGuard/actions/runs/40265747910",
+    "commit": "8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25",
     "conclusion": "success",
     "jobs": ["test (3.11)", "test (3.12)", "test (3.13)"],
     "verified_at": "2026-10-26"
@@ -112,7 +112,7 @@
     "custom_validation_error_operations": ["POST /v1/investigation-loops"]
   },
   "candidate_endpoints": {
-    "description": "I7 API snapshot verified by upstream CI at cd3e9f3; 84 OpenAPI paths",
+    "description": "I7 API snapshot from source commit 66dae883fb75cf90ef735b94d2f5c9b565ba5ad3; runtime pin 8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25; 84 OpenAPI paths",
     "available": [
       "GET /v1/system/readiness",
       "GET /v1/investigations/options",
