@@ -81,6 +81,9 @@ def create_stub_app(
     warden_available: bool = False,
     capabilities_status: int = 200,
     strategy_evaluations_available: bool = False,
+    investigation_loop_report_available: bool = False,
+    report_empty_evidence: bool = False,
+    report_long_text: bool = False,
 ) -> FastAPI:
     app = FastAPI(title="AgentGuard Stub")
 
@@ -492,5 +495,125 @@ def create_stub_app(
             if evaluation_id != "eval-strategy-001":
                 raise HTTPException(status_code=404, detail={"error": "EVALUATION_NOT_FOUND"})
             return evaluation
+
+    if investigation_loop_report_available:
+        report_decision = {
+            "decision_id": "decision-report-001",
+            "round_index": 1,
+            "phase": "COMPLETED",
+            "strategy": "risk_score",
+            "candidate_actions": ["read_evidence"],
+            "selected_action_id": "read_evidence",
+            "selection_reason": "合同 Stub 中的实际选择原因。",
+            "evidence_refs": ["ev-report-001"],
+            "evidence_refs_before": [],
+            "evidence_refs_after": ["ev-report-001"],
+            "new_evidence_count": 1,
+            "cost_estimate": None,
+            "actual_cost": None,
+            "remaining_budget": 2,
+            "result_status": "completed",
+            "new_evidence": True,
+            "stop_reason": "BUDGET_EXHAUSTED",
+        }
+
+        @app.get("/v1/investigations/{request_id}/risk-analysis")
+        def report_risk_analysis(request_id: str) -> dict:
+            text = ("风险分析中的中文长文本。" * 200)[:2048] if report_long_text else "观测到可疑工具调用。"
+            findings = []
+            for index in range(24 if report_long_text else 1):
+                findings.append({
+                    "finding_id": f"finding-report-{index + 1:03d}",
+                    "investigation_id": request_id,
+                    "risk_type": "tool_use_pattern_candidate",
+                    "detection_method": "tool_use_pattern_candidate",
+                    "description": text,
+                    "target_ref": "tool-1",
+                    "supporting_evidence_refs": ["ev-support-001"],
+                    "contradicting_evidence_refs": ["ev-contradict-001"],
+                    "confidence": None,
+                    "status": "candidate",
+                    "evidence_level": "observational",
+                    "verification_status": "unverified",
+                    "severity": "medium",
+                })
+            return {
+                "schema_version": "1.0",
+                "investigation_id": request_id,
+                "run_id": "run-stub-0001",
+                "available": True,
+                "findings": findings,
+                "hypotheses": [{
+                    "hypothesis_id": "hypothesis-report-001",
+                    "investigation_id": request_id,
+                    "finding_id": "finding-report-001",
+                    "statement": "工具调用模式可能需要进一步核验。",
+                    "expected_effect": "更多证据可能改变风险判断。",
+                    "supporting_evidence": ["ev-support-001"],
+                    "contradicting_evidence": ["ev-contradict-001"],
+                    "next_check": "read_evidence",
+                    "required_capabilities": [],
+                    "intervention_supported": False,
+                    "stop_condition": "证据不足时停止推断。",
+                    "status": "proposed",
+                }],
+                "data_source": "warden_observation",
+                "evidence_level": "observational",
+                "limitations": ["该 Stub 不提供真实 WARDEN 或模型运行。"],
+            }
+
+        @app.get("/v1/investigation-loops")
+        def report_list_loops(base_request_id: str, limit: int = 20, offset: int = 0) -> dict:
+            items = []
+            if base_request_id == "inv-stub-0001":
+                items = [{
+                    "loop_id": "loop-stub-001",
+                    "base_request_id": base_request_id,
+                    "phase": "STOPPED",
+                    "strategy": "risk_score",
+                    "rounds_executed": 1,
+                    "stop_reason": "BUDGET_EXHAUSTED",
+                }]
+            return {"schema_version": "1.0", "items": items, "count": len(items),
+                    "limit": limit, "offset": offset}
+
+        @app.get("/v1/investigation-loops/{loop_id}")
+        def report_get_loop(loop_id: str) -> dict:
+            phase = "BLOCKED" if "blocked" in loop_id else "FAILED" if "failed" in loop_id else "STOPPED"
+            return {
+                "schema_version": "1.0",
+                "loop_id": loop_id,
+                "base_request_id": "inv-stub-0001",
+                "phase": phase,
+                "strategy": "risk_score",
+                "stop_reason": "UPSTREAM_UNAVAILABLE" if phase == "FAILED" else "BUDGET_EXHAUSTED",
+                "degradation": None,
+                "metrics": {"rounds_executed": 1, "elapsed_seconds": 1.5,
+                            "model_calls_used": 0, "steps_to_first_evidence": None},
+                "limitations": ["调查 Loop 来源于确定性合同 Stub。"],
+            }
+
+        @app.get("/v1/investigation-loops/{loop_id}/decisions")
+        def report_loop_decisions(loop_id: str) -> dict:
+            items = [] if "blocked" in loop_id or "failed" in loop_id else [report_decision]
+            return {"schema_version": "1.0", "loop_id": loop_id, "items": items,
+                    "count": len(items), "limitations": []}
+
+        @app.get("/v1/investigation-loops/{loop_id}/evidence-changes")
+        def report_loop_evidence_changes(loop_id: str) -> dict:
+            items = [] if report_empty_evidence or "blocked" in loop_id or "failed" in loop_id else [report_decision]
+            return {"schema_version": "1.0", "loop_id": loop_id, "items": items,
+                    "count": len(items), "limitations": []}
+
+        @app.get("/v1/investigation-loops/{loop_id}/budget")
+        def report_loop_budget(loop_id: str) -> dict:
+            return {
+                "schema_version": "1.0",
+                "loop_id": loop_id,
+                "budget": {"max_actions": 3, "max_seconds": 60, "max_model_calls": 5},
+                "metrics": {"rounds_executed": 1, "elapsed_seconds": 1.5,
+                            "model_calls_used": 0, "steps_to_first_evidence": None},
+                "remaining": {"actions_left": 2, "seconds_left": 58.5, "model_calls_left": 5},
+            }
 
     return app

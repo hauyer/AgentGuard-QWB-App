@@ -10,12 +10,16 @@ inferring new causal conclusions.
 from __future__ import annotations
 
 import io
+import json
 import logging
+from datetime import UTC, datetime
 from xml.sax.saxutils import escape as xml_escape
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 from app.core.data_mode import DataMode, effective_data_mode
@@ -25,6 +29,7 @@ from app.services.demo_service import DemoService
 logger = logging.getLogger(__name__)
 
 MAX_PDF_BYTES = 4 * 1024 * 1024
+MAX_REPORT_JSON_BYTES = 4 * 1024 * 1024
 
 EXPERIMENTS_OPERATION = "GET /v1/experiments"
 COMPARE_OPERATION = "POST /v1/experiments/compare"
@@ -48,6 +53,138 @@ class ReportsServiceError(RuntimeError):
         self.message = message
         self.request_id = request_id
         super().__init__(message)
+
+
+def build_investigation_loop_report(
+    client: AgentGuardClient,
+    *,
+    project: dict,
+    request_id: str,
+    loop_id: str,
+) -> dict:
+    """Build a report from project-authorized AgentGuard records, without
+    creating data or inferring unsupported research conclusions."""
+    required_operations = (
+        "GET /v1/investigations/{request_id}",
+        "GET /v1/investigation-loops/{loop_id}",
+        "GET /v1/investigation-loops/{loop_id}/decisions",
+        "GET /v1/investigation-loops/{loop_id}/evidence-changes",
+        "GET /v1/investigation-loops/{loop_id}/budget",
+    )
+    operations = client.discover_operations()
+    if client.discovery_error:
+        raise ReportsServiceError(
+            503,
+            "REPORT_CAPABILITY_UNVERIFIED",
+            "无法核实 AgentGuard 是否支持生成该调查报告；没有生成报告。",
+        )
+    missing = [operation for operation in required_operations if not operations.get(operation)]
+    if missing:
+        raise ReportsServiceError(
+            503,
+            "REPORT_SOURCE_UNSUPPORTED",
+            "AgentGuard 固定版本未提供完整的调查 Loop 报告读取接口。",
+        )
+
+    try:
+        investigation = client.get_investigation(request_id)
+        loop_payload = client.get_investigation_loop(loop_id)
+        loop = loop_payload.get("loop", loop_payload)
+        decisions = client.get_investigation_decisions(loop_id)
+        evidence_changes = client.get_investigation_evidence_changes(loop_id)
+        budget = client.get_investigation_loop_budget(loop_id)
+    except AgentGuardError as exc:
+        raise _to_service_error(exc) from exc
+
+    if not isinstance(loop, dict) or loop.get("loop_id") != loop_id:
+        raise ReportsServiceError(502, "REPORT_LOOP_ID_MISMATCH", "AgentGuard Loop 详情与所请求 ID 不匹配。")
+    if loop.get("base_request_id") != request_id:
+        raise ReportsServiceError(409, "REPORT_BASE_REQUEST_MISMATCH", "Loop 详情不属于所选基础调查。")
+    if not isinstance(decisions.get("items"), list) or not isinstance(evidence_changes.get("items"), list):
+        raise ReportsServiceError(502, "REPORT_SOURCE_BAD_RESPONSE", "AgentGuard 决策或证据变化数据格式无效。")
+    if not isinstance(budget, dict):
+        raise ReportsServiceError(502, "REPORT_SOURCE_BAD_RESPONSE", "AgentGuard 预算数据格式无效。")
+
+    limitations: list[str] = []
+    risk_analysis = _optional_report_source(
+        client,
+        operation="GET /v1/investigations/{request_id}/risk-analysis",
+        read=lambda: client.get_risk_analysis(request_id),
+        limitations=limitations,
+    )
+    defense = _optional_report_source(
+        client,
+        operation="GET /v1/defense-policies/{request_id}",
+        read=lambda: client.get_defense_policies(request_id),
+        limitations=limitations,
+    )
+    limitations.extend(_string_items(loop.get("limitations")))
+    limitations.extend(_string_items(decisions.get("limitations")))
+    limitations.extend(_string_items(evidence_changes.get("limitations")))
+    if not risk_analysis["available"]:
+        limitations.append("AgentGuard 未提供该调查的风险分析数据；报告未推断风险或假设。")
+    if not defense["available"]:
+        limitations.append("AgentGuard 未提供防御候选数据；报告未推断防御效果。")
+
+    return {
+        "schema_version": "1.0",
+        "data_mode": "live",
+        "generated_at": datetime.now(UTC).isoformat(),
+        "project": project,
+        "investigation": investigation,
+        "loop": loop,
+        "risk_analysis": risk_analysis,
+        "decisions": decisions,
+        "evidence_changes": evidence_changes,
+        "budget": budget,
+        "defense": defense,
+        "strategy_evaluation": None,
+        "strategy_evaluation_note": "未发现可将策略评价与该 Loop 可信关联的上游字段，因此没有关联评价。",
+        "data_sources": [
+            {"name": "project", "source": "application project database", "available": True},
+            {"name": "investigation", "source": f"AgentGuard GET /v1/investigations/{request_id}", "available": True},
+            {"name": "loop", "source": f"AgentGuard GET /v1/investigation-loops/{loop_id}", "available": True},
+            {
+                "name": "decisions",
+                "source": f"AgentGuard GET /v1/investigation-loops/{loop_id}/decisions",
+                "available": True,
+            },
+            {
+                "name": "evidence_changes",
+                "source": f"AgentGuard GET /v1/investigation-loops/{loop_id}/evidence-changes",
+                "available": True,
+            },
+            {"name": "budget", "source": f"AgentGuard GET /v1/investigation-loops/{loop_id}/budget", "available": True},
+            {
+                "name": "risk_analysis",
+                "source": f"AgentGuard GET /v1/investigations/{request_id}/risk-analysis",
+                "available": risk_analysis["available"],
+            },
+            {
+                "name": "defense",
+                "source": f"AgentGuard GET /v1/defense-policies/{request_id}",
+                "available": defense["available"],
+            },
+        ],
+        "limitations": list(dict.fromkeys(limitations)),
+    }
+
+
+def _optional_report_source(client, *, operation: str, read, limitations: list[str]) -> dict:
+    if not client.discover_operations().get(operation):
+        limitations.append(f"AgentGuard 固定版本未发布 {operation}。")
+        return {"available": False, "data": None, "error_code": "SOURCE_UNSUPPORTED"}
+    try:
+        return {"available": True, "data": read(), "error_code": None}
+    except AgentGuardError as exc:
+        limitations.append(f"{operation} 当前不可用（{exc.code}）。")
+        return {"available": False, "data": None, "error_code": exc.code}
+
+
+def _string_items(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item]
 
 
 def _agentguard_reachable(client: AgentGuardClient) -> bool:
@@ -283,6 +420,109 @@ def render_report_pdf(report: dict, meta: dict) -> bytes:
     payload = buffer.getvalue()
     if len(payload) > MAX_PDF_BYTES:
         raise ReportsServiceError(500, "PDF_TOO_LARGE", "生成的 PDF 超出 4 MiB 上限")
+    return payload
+
+
+def render_investigation_loop_report_pdf(report: dict) -> bytes:
+    """Render the same live loop-report object used by JSON export.
+
+    STSong-Light is ReportLab's standard Simplified Chinese CID font. It keeps
+    Chinese readable without bundling a third-party font file; Paragraphs and
+    table rows flow across pages, and all upstream strings are XML-escaped.
+    """
+    font_name = "STSong-Light"
+    try:
+        if font_name not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(UnicodeCIDFont(font_name))
+    except Exception as exc:  # noqa: BLE001 - fail explicitly when CJK support is unavailable
+        raise ReportsServiceError(
+            503, "REPORT_CHINESE_FONT_UNAVAILABLE", "当前运行环境无法加载中文 PDF 字体。"
+        ) from exc
+
+    buffer = io.BytesIO()
+    report_id = report.get("loop", {}).get("loop_id", "未提供")
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        topMargin=17 * mm,
+        bottomMargin=18 * mm,
+        leftMargin=17 * mm,
+        rightMargin=17 * mm,
+        title=f"调查报告 {report_id}",
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "InvestigationReportTitleCN", parent=styles["Title"], fontName=font_name,
+        fontSize=16, leading=22, wordWrap="CJK",
+    )
+    heading_style = ParagraphStyle(
+        "InvestigationReportHeadingCN", parent=styles["Heading2"], fontName=font_name,
+        fontSize=11, leading=16, spaceBefore=8, spaceAfter=4, wordWrap="CJK",
+    )
+    body_style = ParagraphStyle(
+        "InvestigationReportBodyCN", parent=styles["BodyText"], fontName=font_name,
+        fontSize=8.5, leading=12, wordWrap="CJK",
+    )
+    json_style = ParagraphStyle(
+        "InvestigationReportJsonCN", parent=body_style, fontSize=7, leading=9,
+        leftIndent=3 * mm, wordWrap="CJK",
+    )
+    story: list = [
+        Paragraph("AgentGuard-QWB-App 调查报告", title_style),
+        Paragraph(f"数据模式：{_esc(report.get('data_mode', '未提供'))}", body_style),
+        Paragraph(f"生成时间：{_esc(report.get('generated_at', '未提供'))}", body_style),
+        Spacer(1, 5),
+    ]
+
+    sections = (
+        ("项目与调查基本信息", {"project": report.get("project"), "investigation": report.get("investigation")}),
+        ("模型与运行环境", {
+            key: report.get("investigation", {}).get(key)
+            for key in ("model_id", "runtime_id", "mode", "scenario_id", "run_id", "experiment_id")
+        }),
+        ("Loop 状态与停止原因", report.get("loop")),
+        ("风险发现与调查假设", report.get("risk_analysis")),
+        ("多轮调查决策", report.get("decisions")),
+        ("证据变化", report.get("evidence_changes")),
+        ("预算消耗", report.get("budget")),
+        ("防御候选与实际验证状态", report.get("defense")),
+        ("策略评价关联", {
+            "evaluation": report.get("strategy_evaluation"),
+            "note": report.get("strategy_evaluation_note"),
+        }),
+        ("数据来源", report.get("data_sources")),
+        ("研究限制", report.get("limitations")),
+    )
+    for title, value in sections:
+        story.append(Paragraph(_esc(title), heading_style))
+        if value is None:
+            story.append(Paragraph("未提供", body_style))
+            continue
+        try:
+            serialized = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
+        except (TypeError, ValueError) as exc:
+            raise ReportsServiceError(
+                502, "REPORT_SERIALIZATION_FAILED", "调查报告包含无法序列化的数据。"
+            ) from exc
+        for line in serialized.splitlines() or [""]:
+            story.append(Paragraph(_esc(line) or "&nbsp;", json_style))
+
+    def footer(canvas, page_doc) -> None:
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColorRGB(0.35, 0.4, 0.46)
+        canvas.drawRightString(A4[0] - 17 * mm, 9 * mm, f"Page {page_doc.page}")
+        canvas.restoreState()
+
+    try:
+        doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    except ReportsServiceError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - convert renderer failures into API errors
+        raise ReportsServiceError(500, "REPORT_PDF_RENDER_FAILED", "无法生成调查报告 PDF。") from exc
+    payload = buffer.getvalue()
+    if len(payload) > MAX_PDF_BYTES:
+        raise ReportsServiceError(413, "REPORT_TOO_LARGE", "生成的 PDF 超出 4 MiB 上限。")
     return payload
 
 

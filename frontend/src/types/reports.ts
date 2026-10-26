@@ -52,6 +52,29 @@ export interface ReportResponse {
   report: Report;
 }
 
+export interface InvestigationLoopReport {
+  schema_version: string;
+  data_mode: "live";
+  generated_at: string;
+  project: Record<string, unknown>;
+  investigation: Record<string, unknown>;
+  loop: Record<string, unknown>;
+  risk_analysis: { available: boolean; data: Record<string, unknown> | null; error_code: string | null };
+  decisions: Record<string, unknown> & { items: Array<Record<string, unknown>> };
+  evidence_changes: Record<string, unknown> & { items: Array<Record<string, unknown>> };
+  budget: Record<string, unknown>;
+  defense: { available: boolean; data: Record<string, unknown> | null; error_code: string | null };
+  strategy_evaluation: Record<string, unknown> | null;
+  strategy_evaluation_note: string;
+  data_sources: Array<{ name: string; source: string; available: boolean }>;
+  limitations: string[];
+}
+
+export interface InvestigationLoopReportResponse {
+  meta: MetaInfo;
+  report: InvestigationLoopReport;
+}
+
 export interface Experience {
   experience_id: string;
   scenario_id?: string | null;

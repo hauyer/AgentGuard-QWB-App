@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
@@ -11,12 +13,16 @@ from pydantic import BaseModel, Field
 from app.api.deps import require_role, require_role_csrf
 from app.integrations.agentguard_client import AgentGuardClient
 from app.services import resource_access
+from app.services.project_service import ProjectServiceError, require_project_access
 from app.services.reports_service import (
+    MAX_REPORT_JSON_BYTES,
     ReportsServiceError,
+    build_investigation_loop_report,
     compare_experiments,
     get_report,
     list_experiences,
     list_experiments,
+    render_investigation_loop_report_pdf,
     render_report_pdf,
 )
 
@@ -38,6 +44,73 @@ def _mode_override(request: Request) -> str | None:
 
 class CompareExperimentsRequest(BaseModel):
     run_ids: list[str] = Field(min_length=2, max_length=20)
+
+
+def _load_investigation_loop_report(request: Request, client: AgentGuardClient, user, request_id: str,
+                                    loop_id: str) -> tuple[dict, int, object] | JSONResponse:
+    settings = request.app.state.settings
+    try:
+        investigation_grant = resource_access.require_investigation_access(
+            settings, client, user, request_id, mode_override=_mode_override(request))
+        if investigation_grant.data_mode.value != "live":
+            raise ReportsServiceError(
+                503, "LIVE_REPORT_UNAVAILABLE",
+                "多轮调查报告只基于 Live 项目数据生成；Recorded/Synthetic 数据不进入 Live 报告。",
+            )
+        project_id = resource_access.require_trusted_investigation_project(
+            settings, request_id, investigation_grant)
+        loop_grant = resource_access.require_loop_access(
+            settings, client, user, loop_id, mode_override=_mode_override(request))
+        if (loop_grant.data_mode.value != "live" or loop_grant.request_id != request_id
+                or project_id not in loop_grant.project_ids):
+            raise resource_access.AccessDenied(
+                "LOOP_NOT_ACCESSIBLE", "调查循环不存在或不可访问", status_code=404)
+        project_context = require_project_access(settings, user, project_id, required_role="viewer")
+        project = project_context.project
+        project_info = {
+            "project_id": project.id,
+            "name": project.name,
+            "description": project.description,
+            "status": project.status,
+            "created_at": project.created_at.isoformat() if project.created_at else None,
+        }
+        report = build_investigation_loop_report(
+            client, project=project_info, request_id=request_id, loop_id=loop_id)
+        return report, project_id, investigation_grant
+    except resource_access.AccessDenied as exc:
+        return _error_response(exc)
+    except resource_access.LoopOwnershipError as exc:
+        return _error_response(exc)
+    except ProjectServiceError as exc:
+        return _error_response(exc)
+    except ReportsServiceError as exc:
+        return _error_response(exc)
+
+
+def _safe_report_part(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "_", value)[:80] or "report"
+
+
+def _report_json_bytes(report: dict) -> bytes:
+    try:
+        content = json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ReportsServiceError(502, "REPORT_SERIALIZATION_FAILED", "调查报告不能序列化为 JSON。") from exc
+    if len(content) > MAX_REPORT_JSON_BYTES:
+        raise ReportsServiceError(413, "REPORT_TOO_LARGE", "生成的 JSON 报告超出 4 MiB 上限。")
+    return content
+
+
+def _audit_loop_report_export(request: Request, user, *, request_id: str, loop_id: str,
+                              project_id: int, format_name: str) -> None:
+    request.app.state.audit_service.record(
+        actor=user.username,
+        role=user.role,
+        action=f"report.export.{format_name}",
+        target=loop_id,
+        project_id=project_id,
+        detail=f"request_id={request_id}",
+    )
 
 
 @router.get("/experiments")
@@ -88,6 +161,84 @@ def experiments_compare(
     except ReportsServiceError as exc:
         return _error_response(exc)
     return {"meta": meta, **payload}
+
+
+@router.get("/reports/investigations/{request_id}/loops/{loop_id}", response_model=None)
+def investigation_loop_report(
+    request: Request,
+    request_id: str,
+    loop_id: str,
+    client: AgentGuardClientDep,
+    user: Viewer,
+) -> dict | JSONResponse:
+    """One project-scoped report snapshot from verified live investigation data."""
+    loaded = _load_investigation_loop_report(request, client, user, request_id, loop_id)
+    if isinstance(loaded, JSONResponse):
+        return loaded
+    report, _project_id, _grant = loaded
+    return {
+        "meta": {
+            "data_mode": "live",
+            "source": "AgentGuard persisted investigation records and the local project registry",
+        },
+        "report": report,
+    }
+
+
+@router.get("/reports/investigations/{request_id}/loops/{loop_id}/export.json", response_model=None)
+def investigation_loop_report_export_json(
+    request: Request,
+    request_id: str,
+    loop_id: str,
+    client: AgentGuardClientDep,
+    user: Viewer,
+) -> Response:
+    loaded = _load_investigation_loop_report(request, client, user, request_id, loop_id)
+    if isinstance(loaded, JSONResponse):
+        return loaded
+    report, project_id, _grant = loaded
+    try:
+        content = _report_json_bytes(report)
+    except ReportsServiceError as exc:
+        return _error_response(exc)
+    _audit_loop_report_export(
+        request, user, request_id=request_id, loop_id=loop_id,
+        project_id=project_id, format_name="json",
+    )
+    filename = f"investigation-report-{_safe_report_part(request_id)}-{_safe_report_part(loop_id)}.json"
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/reports/investigations/{request_id}/loops/{loop_id}/export.pdf", response_model=None)
+def investigation_loop_report_export_pdf(
+    request: Request,
+    request_id: str,
+    loop_id: str,
+    client: AgentGuardClientDep,
+    user: Viewer,
+) -> Response:
+    loaded = _load_investigation_loop_report(request, client, user, request_id, loop_id)
+    if isinstance(loaded, JSONResponse):
+        return loaded
+    report, project_id, _grant = loaded
+    try:
+        content = render_investigation_loop_report_pdf(report)
+    except ReportsServiceError as exc:
+        return _error_response(exc)
+    _audit_loop_report_export(
+        request, user, request_id=request_id, loop_id=loop_id,
+        project_id=project_id, format_name="pdf",
+    )
+    filename = f"investigation-report-{_safe_report_part(request_id)}-{_safe_report_part(loop_id)}.pdf"
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/reports/{run_id}")

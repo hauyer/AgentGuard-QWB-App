@@ -438,6 +438,13 @@ class AgentGuardClient:
             "GET /v1/reports",
             "GET /v1/investigation-loops",
             "POST /v1/investigation-loops",
+            "GET /v1/investigations/{request_id}",
+            "GET /v1/investigations/{request_id}/risk-analysis",
+            "GET /v1/investigation-loops/{loop_id}",
+            "GET /v1/investigation-loops/{loop_id}/decisions",
+            "GET /v1/investigation-loops/{loop_id}/evidence-changes",
+            "GET /v1/investigation-loops/{loop_id}/budget",
+            "GET /v1/defense-policies/{request_id}",
             "GET /v1/research/strategy-evaluations",
             "GET /v1/research/strategy-evaluations/{evaluation_id}",
         ]
