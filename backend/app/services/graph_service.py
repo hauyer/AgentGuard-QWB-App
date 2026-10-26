@@ -1,8 +1,8 @@
 """Interaction graph service (B4, real upstream contract in B13).
 
 Live mode now consumes AgentGuard's C1 message-level interaction graph
-(`GET /v1/investigations/{id}/interaction-graph`, published at pinned commit
-907aa19). The upstream response self-describes availability: `available=false`
+(`GET /v1/investigations/{id}/interaction-graph`, present in the pinned API
+contract). The upstream response self-describes availability: `available=false`
 with `limitations[]` is an honest answer (no message metadata recorded for the
 workflow), surfaced verbatim - never replaced by fabricated edges. When the
 capability is not published on the pinned upstream, the BFF keeps the explicit
@@ -16,6 +16,8 @@ from app.integrations.agentguard_client import AgentGuardClient, AgentGuardError
 from app.services.demo_service import DemoService
 
 GRAPH_OPERATION = "GET /v1/investigations/{request_id}/interaction-graph"
+MAX_GRAPH_NODES = 500
+MAX_GRAPH_EDGES = 2000
 
 
 class GraphServiceError(RuntimeError):
@@ -34,21 +36,62 @@ def _agentguard_reachable(client: AgentGuardClient) -> bool:
 
 
 def _validated_graph(payload: dict) -> dict:
-    """Structural sanity checks on the raw upstream graph."""
+    """Keep only bounded graph data with upstream message/evidence provenance."""
     if not isinstance(payload.get("nodes"), list) or not isinstance(payload.get("edges"), list):
         raise AgentGuardError(502, "API_BAD_RESPONSE",
                               "interaction graph response has invalid nodes/edges")
     for node in payload["nodes"]:
         if not isinstance(node, dict) or not node.get("node_id"):
             raise AgentGuardError(502, "API_BAD_RESPONSE", "interaction graph node missing node_id")
+    selected_nodes = payload["nodes"][:MAX_GRAPH_NODES]
+    selected_ids = {str(node["node_id"]) for node in selected_nodes}
+    verified_edges = []
+    missing_provenance = 0
     for edge in payload["edges"]:
         if not isinstance(edge, dict) or not edge.get("source") or not edge.get("target"):
             raise AgentGuardError(502, "API_BAD_RESPONSE", "interaction graph edge missing endpoints")
-    return payload
+        evidence_refs = edge.get("evidence_refs")
+        has_source = bool(edge.get("message_id")) or (
+            isinstance(evidence_refs, list) and any(isinstance(ref, str) and ref for ref in evidence_refs)
+        )
+        if not has_source:
+            missing_provenance += 1
+            continue
+        if str(edge["source"]) not in selected_ids or str(edge["target"]) not in selected_ids:
+            continue
+        if len(verified_edges) < MAX_GRAPH_EDGES:
+            verified_edges.append(edge)
+
+    limitations = list(payload.get("limitations") or [])
+    truncated = len(payload["nodes"]) > MAX_GRAPH_NODES or len(payload["edges"]) > MAX_GRAPH_EDGES
+    if truncated:
+        limitations.append(
+            f"GRAPH_TRUNCATED: showing at most {MAX_GRAPH_NODES} nodes and {MAX_GRAPH_EDGES} edges; "
+            "this is not a complete graph."
+        )
+    if missing_provenance:
+        limitations.append(
+            f"GRAPH_EDGES_WITHOUT_PROVENANCE_OMITTED: {missing_provenance} edge(s) "
+            "had no message or evidence reference."
+        )
+    return {
+        **payload,
+        "nodes": selected_nodes,
+        "edges": verified_edges,
+        "limitations": limitations,
+        "app_truncated": truncated,
+    }
 
 
 _NODE_TYPE_MAP = {"agent": "agent", "tool": "tool", "model": "model",
                   "invocation": "invocation", "external_resource": "external_resource"}
+
+
+def _edge_source_ref(edge: dict) -> str:
+    evidence_refs = edge.get("evidence_refs")
+    refs = evidence_refs if isinstance(evidence_refs, list) else []
+    first_ref = next((ref for ref in refs if isinstance(ref, str) and ref), None)
+    return str(first_ref or edge.get("message_id") or "")
 
 
 def _to_app_graph(payload: dict) -> dict:
@@ -70,7 +113,7 @@ def _to_app_graph(payload: dict) -> dict:
     ]
     edges = [
         {
-            "id": str(edge.get("message_id") or f"{edge['source']}->{edge['target']}"),
+            "id": str(edge.get("message_id") or f"{_edge_source_ref(edge)}#edge-{index}"),
             "source": str(edge["source"]),
             "target": str(edge["target"]),
             "type": ("message" if "message" in str(edge.get("event_type") or "")
@@ -79,11 +122,11 @@ def _to_app_graph(payload: dict) -> dict:
             "message_id": edge.get("message_id"),
             "risk": str(edge.get("risk") or "unknown"),
             "timestamp": edge.get("timestamp"),
-            "source_id": str((edge.get("evidence_refs") or [edge.get("message_id") or ""])[0]),
+            "source_id": _edge_source_ref(edge),
             "metadata": edge.get("metadata") or {k: v for k, v in edge.items()
                                                  if k not in ("source", "target")},
         }
-        for edge in payload.get("edges", [])
+        for index, edge in enumerate(payload.get("edges", []))
     ]
     candidates = [
         {
@@ -106,6 +149,7 @@ def _to_app_graph(payload: dict) -> dict:
         "not_provable": [str(item) for item in payload.get("limitations", [])],
         "upstream_available": bool(payload.get("available")),
         "upstream_data_status": payload.get("data_status"),
+        "truncated": bool(payload.get("app_truncated")),
     }
 
 

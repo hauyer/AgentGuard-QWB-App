@@ -8,6 +8,7 @@ import { Card } from "../components/ui/card";
 import { ErrorState } from "../components/ui/error-state";
 import { StatusDot } from "../components/ui/status-dot";
 import { useDashboard } from "../hooks/use-dashboard";
+import type { LayerStatusSummary } from "../types/system";
 import { cn } from "../utils/cn";
 
 export function SystemOverviewPage() {
@@ -50,7 +51,7 @@ export function SystemOverviewPage() {
       <DemoBanner meta={meta} />
 
       <Card title="依赖状态">
-        <div className="grid grid-cols-1 divide-y divide-surface-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <div className="grid grid-cols-1 divide-y divide-surface-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-4 xl:divide-x">
           <HealthStatus title="应用服务 BFF" ok={system.app.status === "ok"} detail={`${system.app.name} v${system.app.version}`} />
           <HealthStatus
             title="AgentGuard"
@@ -73,6 +74,15 @@ export function SystemOverviewPage() {
             }
             errorCode={system.warden.error_code ?? undefined}
           />
+          <LayerStatusCard title="模型 / Agent Runtime" summary={system.runtime} />
+        </div>
+      </Card>
+
+      <Card title="运行能力与资源" description="只显示 AgentGuard 公开报告的状态；未知表示没有对应的可验证状态。">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <LayerStatusCard title="Probe / SAE" summary={system.probe_sae} />
+          <LayerStatusCard title="威胁合同" summary={system.threat_contracts} />
+          <LayerStatusCard title="证据工件" summary={system.artifacts} />
         </div>
       </Card>
 
@@ -238,6 +248,39 @@ function HealthStatus({
           {requestId && <span className="ml-2">Request ID：{requestId}</span>}
         </p>
       )}
+    </section>
+  );
+}
+
+function LayerStatusCard({
+  title,
+  summary,
+}: {
+  title: string;
+  summary?: LayerStatusSummary;
+}) {
+  const status = summary?.status ?? "unknown";
+  const presentation: Record<string, { label: string; variant: "ok" | "warn" | "danger" | "neutral" }> = {
+    available: { label: "可用", variant: "ok" },
+    blocked: { label: "阻塞", variant: "warn" },
+    unavailable: { label: "不可用", variant: "danger" },
+    unsupported: { label: "不支持", variant: "neutral" },
+    unknown: { label: "未知", variant: "neutral" },
+  };
+  const current = presentation[status] ?? presentation.unknown;
+  return (
+    <section className="rounded-md border border-surface-border px-3 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold text-slate-600">{title}</h3>
+        <Badge variant={current.variant}>{current.label}</Badge>
+      </div>
+      <p className="mt-2 min-h-5 text-sm text-slate-600">
+        {summary?.reason ?? summary?.blockers?.join("; ") ??
+          (status === "available" ? "AgentGuard 报告可用" : "没有可验证的状态报告")}
+      </p>
+      <p className="mt-1 text-[11px] text-slate-400">
+        责任层：AgentGuard{summary?.source ? ` · 来源：${summary.source}` : " · 来源状态未知"}
+      </p>
     </section>
   );
 }

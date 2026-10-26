@@ -32,6 +32,20 @@ class _RecordingTransport(httpx.MockTransport):
         raise AssertionError("subclass must define _handler")
 
 
+class _ChunkedBody(httpx.SyncByteStream):
+    def __init__(self, chunks: int) -> None:
+        self.chunks = chunks
+        self.consumed = 0
+
+    def __iter__(self):
+        for _ in range(self.chunks):
+            self.consumed += 64 * 1024
+            yield b"x" * (64 * 1024)
+
+    def close(self) -> None:
+        pass
+
+
 def _transport_returning(*responses: httpx.Response) -> _RecordingTransport:
     queue = list(responses)
 
@@ -66,13 +80,16 @@ def test_loop_create_sends_operator_and_idempotency_headers_without_retry() -> N
     )
     payload = {"schema_version": "1.0", "base_request_id": "inv-1", "strategy": "information_value"}
     with AgentGuardClient(settings, transport=transport) as client, pytest.raises(AgentGuardError):
-        client.create_investigation_loop(payload, idempotency_key="stable-key")
+        client.create_investigation_loop(
+            payload, idempotency_key="stable-key", request_id="stable-submission-id"
+        )
     assert len(transport.requests) == 1
     request = transport.requests[0]
     assert request.method == "POST"
     assert request.url.path == "/v1/investigation-loops"
     assert request.headers["X-AgentGuard-Operator-Token"] == "operator-secret"
     assert request.headers["X-Loop-Idempotency-Key"] == "stable-key"
+    assert request.headers["X-Request-ID"] == "stable-submission-id"
     assert json.loads(request.content) == payload
 
 
@@ -99,7 +116,8 @@ def test_error_mapping_preserves_agentguard_error_code() -> None:
     assert error.status_code == 503
     assert error.code == "WARDEN_NOT_CONFIGURED"
     assert error.request_id == "req-1"
-    assert "no kernel" in str(error)
+    assert "not configured" in str(error)
+    assert "no kernel" not in str(error)
 
 
 def test_network_failure_maps_to_unavailable() -> None:
@@ -134,6 +152,17 @@ def test_response_over_size_limit_is_rejected() -> None:
     with AgentGuardClient(settings, transport=transport) as client, pytest.raises(AgentGuardError) as exc_info:
         client.health()
     assert exc_info.value.code == "API_RESPONSE_TOO_LARGE"
+    assert exc_info.value.status_code == 502
+
+
+def test_streaming_response_is_stopped_when_size_limit_is_crossed() -> None:
+    body = _ChunkedBody(100)
+    settings = make_settings()
+    transport = _transport_returning(httpx.Response(200, stream=body))
+    with AgentGuardClient(settings, transport=transport) as client, pytest.raises(AgentGuardError) as exc_info:
+        client.health()
+    assert exc_info.value.code == "API_RESPONSE_TOO_LARGE"
+    assert body.consumed < body.chunks * 64 * 1024
 
 
 def test_invalid_json_is_rejected() -> None:
@@ -142,6 +171,7 @@ def test_invalid_json_is_rejected() -> None:
     with AgentGuardClient(settings, transport=transport) as client, pytest.raises(AgentGuardError) as exc_info:
         client.health()
     assert exc_info.value.code == "API_BAD_RESPONSE"
+    assert exc_info.value.status_code == 502
 
 
 def test_non_object_json_is_rejected() -> None:
@@ -150,6 +180,7 @@ def test_non_object_json_is_rejected() -> None:
     with AgentGuardClient(settings, transport=transport) as client, pytest.raises(AgentGuardError) as exc_info:
         client.health()
     assert exc_info.value.code == "API_BAD_RESPONSE"
+    assert exc_info.value.status_code == 502
 
 
 def test_get_retries_transient_failure_then_succeeds() -> None:
@@ -189,7 +220,8 @@ def test_redirect_is_not_followed() -> None:
     transport = _transport_returning(httpx.Response(302, headers={"Location": "http://evil.example/"}))
     with AgentGuardClient(settings, transport=transport) as client, pytest.raises(AgentGuardError) as exc_info:
         client.health()
-    assert exc_info.value.status_code == 302
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.code == "API_REDIRECT_REJECTED"
 
 
 def test_rejects_unversioned_or_unsafe_path() -> None:
@@ -224,6 +256,97 @@ def test_body_is_json_encoded() -> None:
         client.create_investigation({"request_id": "r", "mode": "observation"})
     body = json.loads(transport.requests[0].content.decode())
     assert body == {"request_id": "r", "mode": "observation"}
+
+
+@pytest.mark.parametrize("status", [401, 403, 422, 429, 500, 502, 503])
+def test_upstream_http_errors_keep_status_but_sanitize_body(status: int) -> None:
+    settings = make_settings()
+    transport = _transport_returning(
+        httpx.Response(
+            status,
+            json={"detail": {"error": "SECRET TOKEN / private/path", "message": "traceback SECRET TOKEN"}},
+            headers={"X-Request-ID": "bad\r\nX-Evil: yes"},
+        )
+    )
+    with AgentGuardClient(settings, transport=transport) as client, pytest.raises(AgentGuardError) as exc_info:
+        client.create_investigation({"request_id": "x"}, request_id="stable-request-1")
+    error = exc_info.value
+    assert error.status_code == status
+    assert error.code == "API_REQUEST_REJECTED"
+    assert error.request_id == "stable-request-1"
+    assert "SECRET" not in str(error)
+    assert "private/path" not in str(error)
+    assert len(transport.requests) == 1
+
+
+def test_known_upstream_error_message_is_replaced_by_safe_text() -> None:
+    settings = make_settings()
+    transport = _transport_returning(
+        httpx.Response(
+            503,
+            json={"detail": {"error": "WARDEN_NOT_CONFIGURED", "message": "secret: /srv/internal/token"}},
+            headers={"X-Request-ID": "upstream-req-2"},
+        )
+    )
+    with AgentGuardClient(settings, transport=transport) as client, pytest.raises(AgentGuardError) as exc_info:
+        client.create_investigation({"request_id": "x"}, request_id="app-req-2")
+    assert exc_info.value.code == "WARDEN_NOT_CONFIGURED"
+    assert exc_info.value.request_id == "upstream-req-2"
+    assert str(exc_info.value) == "WARDEN is not configured on the AgentGuard service."
+    assert "/srv/internal/token" not in str(exc_info.value)
+
+
+def test_post_disconnect_is_ambiguous_and_never_retried_with_same_request_id() -> None:
+    seen: list[str] = []
+
+    def disconnect(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers["X-Request-ID"])
+        raise httpx.ReadError("connection dropped after submit", request=request)
+
+    settings = make_settings()
+    with AgentGuardClient(settings, transport=httpx.MockTransport(disconnect)) as client, pytest.raises(
+        AgentGuardUnavailable
+    ) as exc_info:
+        client.create_investigation({"request_id": "x"}, request_id="stable-post-id")
+    assert exc_info.value.request_id == "stable-post-id"
+    assert seen == ["stable-post-id"]
+
+
+def test_post_resubmission_preserves_request_id_and_does_not_auto_retry() -> None:
+    settings = make_settings()
+    transport = _transport_returning(
+        httpx.Response(200, json={"request_id": "stable-post-id"}),
+        httpx.Response(200, json={"request_id": "stable-post-id"}),
+    )
+    with AgentGuardClient(settings, transport=transport) as client:
+        client.create_investigation({"request_id": "stable-post-id"}, request_id="stable-post-id")
+        client.create_investigation({"request_id": "stable-post-id"}, request_id="stable-post-id")
+    assert len(transport.requests) == 2
+    assert [request.headers["X-Request-ID"] for request in transport.requests] == [
+        "stable-post-id", "stable-post-id"
+    ]
+
+
+def test_client_ignores_proxy_environment_and_keeps_token_server_side(monkeypatch) -> None:
+    monkeypatch.setenv("HTTP_PROXY", "http://untrusted-proxy.invalid:8080")
+    monkeypatch.setenv("HTTPS_PROXY", "http://untrusted-proxy.invalid:8080")
+    settings = make_settings(agentguard_api_token="api-secret")
+    transport = _transport_returning(httpx.Response(200, json={"status": "ok"}))
+    with AgentGuardClient(settings, transport=transport) as client:
+        assert client._http._trust_env is False
+        client.health()
+    request = transport.requests[0]
+    assert request.headers["X-AgentGuard-Token"] == "api-secret"
+    assert "api-secret" not in request.url.__str__()
+
+
+def test_rejects_untrusted_request_id_characters() -> None:
+    settings = make_settings()
+    with (
+        AgentGuardClient(settings, transport=httpx.MockTransport(_dummy)) as client,
+        pytest.raises(ValueError, match="request_id"),
+    ):
+        client.health(request_id="bad\r\nX-Evil: yes")
 
 
 def _dummy(request: httpx.Request) -> httpx.Response:

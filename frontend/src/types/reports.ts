@@ -11,6 +11,9 @@ export interface Experiment {
   investigation_strategy?: string | null;
   defense_strategy?: string | null;
   execution_status?: string | null;
+  metrics_available?: boolean | null;
+  evidence_level?: string | null;
+  data_source?: string | null;
   risk_indicators?: Record<string, number> | null;
   utility?: { normal_task_success_rate?: number | null } | null;
   budget?: { tokens?: number | null; cost_usd?: number | null; time_seconds?: number | null } | null;

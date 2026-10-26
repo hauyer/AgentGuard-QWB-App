@@ -40,6 +40,13 @@ export interface WardenStatusSummary {
   authoritative_for?: string[];
 }
 
+export interface LayerStatusSummary {
+  status: "available" | "blocked" | "unavailable" | "unsupported" | "unknown";
+  reason?: string | null;
+  source?: string | null;
+  blockers?: string[];
+}
+
 export interface FeatureAvailability {
   name: string;
   available: boolean;
@@ -51,6 +58,10 @@ export interface SystemStatus {
   data_mode: DataMode;
   agentguard: AgentGuardStatus;
   warden: WardenStatusSummary;
+  runtime?: LayerStatusSummary;
+  probe_sae?: LayerStatusSummary;
+  threat_contracts?: LayerStatusSummary;
+  artifacts?: LayerStatusSummary;
   capabilities?: AgentGuardCapabilities | null;
   features: FeatureAvailability[];
   unavailable_features: FeatureAvailability[];

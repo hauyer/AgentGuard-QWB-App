@@ -1,5 +1,7 @@
 # AgentGuard-QWB-App J2.1–J8 最终验收
 
+> 本文后续的“RC2 静态集成更新”覆盖早前记录中的运行时 pin 和 OpenAPI 验收状态；较早章节作为历史记录保留。
+
 **日期：** 2026-10-26
 **应用分支：** `feature/b25-b33-real-integration`
 **本轮起点：** `d1cce0be70222488f3c7d1f0d1d90f338dd6f4b6`
@@ -79,3 +81,43 @@ QWB-App CI run [40265680338](https://github.com/hauyer/AgentGuard-QWB-App/action
 | `127.0.0.1:8000` AgentGuard 连接检查 | 不可达；真实 HTTP Smoke 为 **NOT_RUN** |
 
 QWB-App run 40265680338 中，SQLite migration、Playwright、前端检查、Docker builds 和 PostgreSQL migration/concurrency 任务通过；合同校验与后端测试因上述原始换行哈希不一致失败，Ruff 检查通过，Live AgentGuard smoke 被跳过。该 CI 记录对应修复前提交；本次修复的验证结果以本节本地命令记录为准。真实服务联调仍为 **NOT_RUN**；WARDEN Live Gate 仍为 **BLOCKED**，未把 Stub 或离线验证描述为真实模型/执行成功。
+
+## RC2 静态集成更新（覆盖本文件早前的 8a7c154 pin）
+
+**核查日期：** 2026-10-26
+**运行时 pin：** AgentGuard `63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc`，版本 `1.1.0rc2`，提交主题 `Refresh WARDEN gate implementation snapshot`。
+**API 快照来源：** 同一提交 `63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc`。这是 API 来源记录；前一版 API 来源 `66dae883fb75cf90ef735b94d2f5c9b565ba5ad3` 已单独保存在版本合同中。
+**上游 CI：** [AgentGuard CI run 40314646080](https://github.com/hauyer/AgentGuard/actions/runs/40314646080)，提交匹配，Python 3.11、3.12、3.13 全部通过。
+
+RC1 快照保留为 84 paths、raw SHA-256 `d577e6001883ada17d47f195cafe48c5394e46c5f16f587636eb907a1e1aa78e`、canonical SHA-256 `e2d6d9bd7cf94441fa508b34af922b8da7cf724778ff62d10b728367a93c3c9f`。RC2 快照为 86 paths、raw SHA-256 `2ce83660a67111a346a2de9772fcaec1938a4a5de713439de34a83e372b9a5e5`、canonical SHA-256 `430a8115f4dfb8c865060d45345a58bf267f60657b1ba8ab1c0faa2ba3acf41c`。静态 diff 新增 `GET /v1/system/identity` 与 `POST /v1/investigation-loops/{loop_id}/reconcile`，没有移除 operation；三个新增 Schema 为 `SystemIdentityResponse`、`InvestigationLoopReconciliationResponse` 和 `ReconciledWorkflowView`。33 个 App-supported operations 的 parameters、requestBody、responses 和 security 未变化。每次离线合同检查会重新验证原始/规范哈希、路径数、operation diff 和这些支持端点的合同。
+
+两个新增 operation 都没有接入 BFF 或 UI。RC2 的 reconcile 在上游文档中为 query-only；没有真实服务响应可验证其运行行为。公开 defense execute、artifact content、Probe train/predict 路由仍不代表 App 已验证这些能力：执行保持 BLOCKED，artifact content 与 Probe/SAE 未暴露。
+
+**验证边界：** 当前环境没有 AgentGuard 服务地址、API/Operator 凭证或 PostgreSQL 测试 URL；真实 HTTP Smoke 为 **NOT_RUN**，WARDEN Live Gate 为 **BLOCKED**。本地 Stub 和离线静态校验不能替代真实服务联调。各阶段的实际命令、通过/失败/跳过数量见下方“本轮验证记录”。
+
+### 本轮验证记录
+
+| 检查 | 结果 |
+| --- | --- |
+| `python scripts/check_agentguard_contract.py --offline-only` | PASS；RC2 原始/规范化 SHA、版本、86 paths、operation 差异及 33 个已支持端点的请求/响应合同通过 |
+| `python -m pytest tests/test_contract_snapshot.py` | PASS；6 passed |
+| `python -m pytest`（backend） | PASS；278 passed，1 skipped，743.79 秒 |
+| `python -m ruff check app tests`（backend） | PASS；All checks passed |
+| `python ../scripts/verify_migrations.py`（backend） | PASS；SQLite upgrade/current/downgrade/re-upgrade 均成功，必需表和活动提交唯一锁存在 |
+| `python -m pytest tests/test_postgres_loop_concurrency.py -q` | SKIP；1 项因未配置 `QWB_TEST_POSTGRES_URL` 跳过，未执行 PostgreSQL 并发实测 |
+| `npm run typecheck` | PASS |
+| `npm run lint` | PASS |
+| `npm run test` | PASS；13 个文件、68 项 |
+| `npm run build` | PASS；Vite 构建成功，JS bundle 超过 500 kB 提示 |
+| `npm run e2e` | PASS；2 项 Playwright，使用确定性 Stub，仅验证应用流程，不构成真实 AgentGuard/WARDEN 验收 |
+| `docker compose config --quiet` | PASS |
+| `docker compose build` | PASS；前后端镜像构建成功；Docker 内 `npm ci` 报告 11 项依赖审计告警（8 moderate、1 high、2 critical） |
+| `git diff --check` | PASS；没有空白错误 |
+| AgentGuard HTTP Smoke | **NOT_RUN**；未配置真实服务 URL、API token 或 Operator token |
+| 新的 QWB-App GitHub Actions CI | **NOT_RUN**；本轮修改保留在本地，没有推送或触发应用仓库 CI |
+
+已确认的原始哈希问题来自 Windows `core.autocrlf=true`：预期值 `b7c4e197…` 是 8,221 个 LF 被转成 CRLF 后的 238,256 字节工作副本哈希；仓库与固定 RC1 来源文件均为 230,035 字节 LF，原始 SHA `d577e600…`，canonical SHA 一致。合同改为匹配固定原始文件，并以 `.gitattributes` 固定快照换行，没有关闭哈希验证。状态测试也从过时的 `unknown` 预期更新为与 Stub 能力清单一致的 `unsupported`，之后完整后端套件复跑通过。
+
+Docker 首轮构建发现前端 Windows `node_modules` 被复制进 Linux 镜像；新增 `.dockerignore` 后构建上下文降至前端约 2 MB、后端约 0.4 MB，最终镜像构建通过。状态卡片显示 blocker 列表的类型也已改为共享 `LayerStatusSummary`，通过前端类型检查和生产构建。
+
+最终边界：真实 AgentGuard HTTP Smoke 为 **NOT_RUN**，WARDEN Live Gate 仍为 **BLOCKED**。RC2 静态合同、Stub 单测和 Playwright 结果均不代表真实 WARDEN、模型或远端 Loop 执行成功。未推送、未合并、未部署。

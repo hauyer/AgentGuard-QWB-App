@@ -53,11 +53,22 @@ class FeatureAvailability(BaseModel):
     reason: str | None = None
 
 
+class LayerStatusSummary(BaseModel):
+    status: Literal["available", "blocked", "unavailable", "unsupported", "unknown"] = "unknown"
+    reason: str | None = None
+    source: str | None = None
+    blockers: list[str] = Field(default_factory=list)
+
+
 class SystemStatus(BaseModel):
     app: dict[str, str]
     data_mode: Literal["live", "recorded", "synthetic", "unavailable"]
     agentguard: AgentGuardStatus
     warden: WardenStatusSummary
+    runtime: LayerStatusSummary = Field(default_factory=LayerStatusSummary)
+    probe_sae: LayerStatusSummary = Field(default_factory=LayerStatusSummary)
+    threat_contracts: LayerStatusSummary = Field(default_factory=LayerStatusSummary)
+    artifacts: LayerStatusSummary = Field(default_factory=LayerStatusSummary)
     capabilities: AgentGuardCapabilities | None = None
     features: list[FeatureAvailability] = Field(default_factory=list)
     unavailable_features: list[FeatureAvailability] = Field(default_factory=list)

@@ -1,32 +1,37 @@
 {
-  "schema_version": "1.3",
+  "schema_version": "1.4",
   "pinned_agentguard": {
     "repository": "https://github.com/hauyer/AgentGuard",
     "branch": "feature/i-reliability-and-live-validation",
-    "commit": "8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25",
-    "commit_short": "8a7c154",
-    "commit_subject": "Harden WARDEN reconciliation and loop budgets",
-    "api_source_commit": "66dae883fb75cf90ef735b94d2f5c9b565ba5ad3",
+    "commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
+    "commit_short": "63fe1b5",
+    "commit_subject": "Refresh WARDEN gate implementation snapshot",
+    "api_source_commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
     "pinned_at": "2026-10-26",
-    "previous_pin": "3c34931f983b545c77ee79f866425eb63053807b (D7, branch feature/d-real-investigation)",
-    "upstream_version": "1.1.0rc1",
-    "local_clone": "D:/study homework/stego/AgentGuard (read-only)"
+    "previous_pin": "8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25 (1.1.0rc1; prior runtime pin)",
+    "upstream_version": "1.1.0rc2"
   },
   "openapi": {
-    "path_count": 84,
-    "sha256_file": "d577e6001883ada17d47f195cafe48c5394e46c5f16f587636eb907a1e1aa78e",
-    "sha256_canonical_json": "e2d6d9bd7cf94441fa508b34af922b8da7cf724778ff62d10b728367a93c3c9f",
+    "path_count": 86,
+    "sha256_file": "2ce83660a67111a346a2de9772fcaec1938a4a5de713439de34a83e372b9a5e5",
+    "sha256_canonical_json": "430a8115f4dfb8c865060d45345a58bf267f60657b1ba8ab1c0faa2ba3acf41c",
     "verified_at": "2026-10-26",
-    "snapshot": "integration-data/agentguard-openapi-cd3e9f3.json",
-    "source_commit": "66dae883fb75cf90ef735b94d2f5c9b565ba5ad3"
+    "snapshot": "integration-data/agentguard-openapi-63fe1b5.json",
+    "source_commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
+    "verification_method": "static_source_only",
+    "live_openapi": "NOT_RUN"
   },
   "upstream_ci": {
     "workflow": "AgentGuard CI",
-    "run_id": 40265747910,
-    "run_url": "https://github.com/hauyer/AgentGuard/actions/runs/40265747910",
-    "commit": "8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25",
+    "run_id": 40314646080,
+    "run_url": "https://github.com/hauyer/AgentGuard/actions/runs/40314646080",
+    "commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
     "conclusion": "success",
-    "jobs": ["test (3.11)", "test (3.12)", "test (3.13)"],
+    "jobs": [
+      "test (3.11)",
+      "test (3.12)",
+      "test (3.13)"
+    ],
     "verified_at": "2026-10-26"
   },
   "api_documentation": {
@@ -40,7 +45,7 @@
     "loop_service": "GET/POST /v1/investigation-loops (I7 persisted registry; stable idempotency key required for POST)",
     "strategy_evaluations": "GET /v1/research/strategy-evaluations[/{evaluation_id}] (I7 persisted artifacts)",
     "risk_hypotheses": "GET /v1/runs/{run_id}/findings + /hypotheses (E1 semantics)",
-    "openapi_diff_report": "docs/integration/openapi-1.1.0rc1.json (frozen I7 snapshot)"
+    "openapi_diff_report": "docs/api/AGENTGUARD_OPENAPI_DIFF_RC2.md"
   },
   "supported_endpoints": [
     "GET /v1/system/health",
@@ -82,23 +87,44 @@
     "request_models": {
       "POST /v1/investigations": {
         "schema": "WardenAuditRequest",
-        "required_fields": ["request_id", "contract_id", "model_id", "runtime_id"],
+        "required_fields": [
+          "request_id",
+          "contract_id",
+          "model_id",
+          "runtime_id"
+        ],
         "rejects_extra_fields": true
       },
       "POST /v1/investigation-loops": {
         "schema": "InvestigationLoopCreateRequest",
-        "required_fields": ["base_request_id"],
+        "required_fields": [
+          "base_request_id"
+        ],
         "rejects_extra_fields": true
       }
     },
     "pagination_parameters": {
-      "GET /v1/investigations": ["limit", "offset"],
-      "GET /v1/reports": ["limit", "offset"],
-      "GET /v1/investigation-loops": ["limit", "offset"],
-      "GET /v1/research/strategy-evaluations": ["limit", "offset"]
+      "GET /v1/investigations": [
+        "limit",
+        "offset"
+      ],
+      "GET /v1/reports": [
+        "limit",
+        "offset"
+      ],
+      "GET /v1/investigation-loops": [
+        "limit",
+        "offset"
+      ],
+      "GET /v1/research/strategy-evaluations": [
+        "limit",
+        "offset"
+      ]
     },
     "required_headers": {
-      "POST /v1/investigation-loops": ["X-Loop-Idempotency-Key"]
+      "POST /v1/investigation-loops": [
+        "X-Loop-Idempotency-Key"
+      ]
     },
     "headers_present": {
       "POST /v1/investigation-loops": [
@@ -109,23 +135,34 @@
       ]
     },
     "validation_error_schema": "HTTPValidationError",
-    "custom_validation_error_operations": ["POST /v1/investigation-loops"]
+    "custom_validation_error_operations": [
+      "POST /v1/investigation-loops"
+    ]
   },
   "candidate_endpoints": {
-    "description": "I7 API snapshot from source commit 66dae883fb75cf90ef735b94d2f5c9b565ba5ad3; runtime pin 8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25; 84 OpenAPI paths",
-    "available": [
-      "GET /v1/system/readiness",
-      "GET /v1/investigations/options",
-      "GET /v1/investigations/{request_id}/timeline",
-      "GET /v1/reports (list)",
-      "GET /v1/runs/{run_id}/findings",
-      "GET /v1/runs/{run_id}/hypotheses",
-      "GET /v1/runs/{run_id}/investigation (multi-round journal)",
-      "GET /v1/investigation-loops (persisted Loop registry)",
-      "POST /v1/investigation-loops (Operator + stable idempotency key)",
-      "GET /v1/research/strategy-evaluations (persisted evaluation registry)",
-      "GET /v1/research/strategy-evaluations/{evaluation_id} (persisted report artifact)"
-    ]
+    "description": "OpenAPI additions between the 1.1.0rc1 snapshot (API source 66dae883fb75cf90ef735b94d2f5c9b565ba5ad3) and 1.1.0rc2 (API source 63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc). These operations remain outside the App client and UI until live behavior is verified.",
+    "published_not_exposed": [
+      {
+        "operation": "GET /v1/system/identity",
+        "status": "candidate",
+        "verification": "static_source_only",
+        "reason": "New in rc2; no live identity response verified."
+      },
+      {
+        "operation": "POST /v1/investigation-loops/{loop_id}/reconcile",
+        "status": "candidate",
+        "verification": "static_source_only",
+        "reason": "New in rc2; documented query-only reconciliation but not live validated or exposed by the App."
+      }
+    ],
+    "not_published": [
+      {
+        "operation": "POST /v1/investigation-loops/{loop_id}/cancel",
+        "status": "unpublished",
+        "reason": "RC2 exposes workflow/run cancellation under different resource identities; there is no Loop-scoped cancellation operation and the App does not map cancellation across those identities."
+      }
+    ],
+    "not_published_note": "Absence is recorded only for explicit resource-scoped operations checked in the RC2 OpenAPI inventory; other cancellation operations under different resource identities are not treated as equivalent."
   },
   "auth": {
     "general": "X-AgentGuard-Token",
@@ -141,7 +178,80 @@
     "pagination": "Loop list: items/count(current page)/offset/limit/next_offset; strategy evaluation list: items/count(current page)/offset/limit without next_offset",
     "loop_idempotency": "X-Loop-Idempotency-Key is mandatory; same key and same payload returns the registered Loop, changed payload returns 409 LOOP_IDEMPOTENCY_CONFLICT",
     "strategy_evaluation_artifacts": "Persisted index/detail reads only; missing artifact returns 410 EVALUATION_ARTIFACT_UNAVAILABLE; null metrics remain unknown",
-    "evidence_levels": ["synthetic", "observational", "interventional", "causal_validated"],
+    "evidence_levels": [
+      "synthetic",
+      "observational",
+      "interventional",
+      "causal_validated"
+    ],
     "defense_execute": "compatibility entry; executor missing => honest unsupported response"
+  },
+  "previous_contract": {
+    "runtime_commit": "8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25",
+    "runtime_version": "1.1.0rc1",
+    "api_source_commit": "66dae883fb75cf90ef735b94d2f5c9b565ba5ad3",
+    "snapshot": "integration-data/agentguard-openapi-cd3e9f3.json",
+    "raw_sha256": "d577e6001883ada17d47f195cafe48c5394e46c5f16f587636eb907a1e1aa78e",
+    "canonical_sha256": "e2d6d9bd7cf94441fa508b34af922b8da7cf724778ff62d10b728367a93c3c9f",
+    "path_count": 84,
+    "runtime_commit_subject": "Harden WARDEN reconciliation and loop budgets"
+  },
+  "verification": {
+    "source_review": "PASS",
+    "supported_endpoint_schema_diff": "PASS_NO_CHANGES",
+    "static_source_only": true,
+    "live_openapi": "NOT_RUN: no AgentGuard service configured or reachable",
+    "http_smoke": "NOT_RUN: no AgentGuard service or credentials configured",
+    "warden_live_gate": "BLOCKED",
+    "new_endpoints_exposed_to_application": false
+  },
+  "capability_status": {
+    "published_but_not_app_supported": [
+      {
+        "operation": "POST /v1/defense-policies/{request_id}/execute",
+        "status": "blocked",
+        "reason": "The App has no verified live executor evidence; UI execution remains disabled. An OpenAPI operation alone does not establish a safe, working executor."
+      },
+      {
+        "operation": "GET /v1/artifacts/{artifact_id}/content",
+        "status": "candidate",
+        "reason": "No App-managed artifact download and integrity-verification flow has been implemented or live validated."
+      },
+      {
+        "operation": "POST /v1/probes/train",
+        "status": "candidate",
+        "reason": "No App workflow or live validation for Probe/SAE operations."
+      },
+      {
+        "operation": "POST /v1/probes/predict",
+        "status": "candidate",
+        "reason": "No App workflow or live validation for Probe/SAE operations."
+      }
+    ],
+    "blocked": [
+      "WARDEN Live Gate: BLOCKED; no real runtime execution was validated."
+    ]
+  },
+  "openapi_diff": {
+    "baseline_snapshot": "integration-data/agentguard-openapi-cd3e9f3.json",
+    "added_operations": [
+      "GET /v1/system/identity",
+      "POST /v1/investigation-loops/{loop_id}/reconcile"
+    ],
+    "removed_operations": [],
+    "assert_unchanged_for_supported": [
+      "parameters",
+      "requestBody",
+      "responses",
+      "security"
+    ],
+    "added_schemas": [
+      "InvestigationLoopReconciliationResponse",
+      "ReconciledWorkflowView",
+      "SystemIdentityResponse"
+    ],
+    "removed_schemas": [],
+    "baseline_raw_sha256": "d577e6001883ada17d47f195cafe48c5394e46c5f16f587636eb907a1e1aa78e",
+    "baseline_canonical_sha256": "e2d6d9bd7cf94441fa508b34af922b8da7cf724778ff62d10b728367a93c3c9f"
   }
 }

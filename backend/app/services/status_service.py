@@ -18,6 +18,7 @@ from app.schemas.system import (
     AgentGuardStatus,
     ErrorInfo,
     FeatureAvailability,
+    LayerStatusSummary,
     SystemStatus,
     WardenStatusSummary,
 )
@@ -38,7 +39,7 @@ _FEATURES: dict[str, str] = {
     "reports.read": "GET /v1/reports/{run_id}",
     "experiences.read": "GET /v1/experiences",
     "audit.events.read": "GET /v1/system/audit-events (operator token)",
-    "interaction.graph": "message-level graph API is not yet exposed by AgentGuard public API",
+    "interaction.graph": "GET /v1/investigations/{request_id}/interaction-graph",
 }
 
 
@@ -66,6 +67,67 @@ def _warden_from(payload: dict) -> WardenStatusSummary:
     )
 
 
+def _layer_status(
+    readiness: dict | None,
+    capabilities: AgentGuardCapabilities | None,
+    *,
+    check_names: tuple[str, ...],
+    capability_names: tuple[str, ...] = (),
+) -> LayerStatusSummary:
+    checks = readiness.get("checks", []) if isinstance(readiness, dict) else []
+    matches = [
+        check for check in checks
+        if isinstance(check, dict)
+        and any(token in str(check.get("name", "")).lower() for token in check_names)
+    ]
+    if matches:
+        statuses = {str(check.get("status", "unknown")).lower() for check in matches}
+        if "blocked" in statuses:
+            status = "blocked"
+        elif "unavailable" in statuses:
+            status = "unavailable"
+        elif "unsupported" in statuses:
+            status = "unsupported"
+        elif statuses == {"available"}:
+            status = "available"
+        else:
+            status = "unknown"
+        blockers = list(dict.fromkeys(
+            blocker
+            for check in matches
+            for blocker in check.get("blockers", [])
+            if isinstance(blocker, str) and blocker
+        ))
+        sources = list(dict.fromkeys(
+            str(check["source"]) for check in matches if check.get("source")
+        ))
+        reason = "; ".join(blockers) or None
+        return LayerStatusSummary(
+            status=status,
+            reason=reason,
+            source=", ".join(sources) or None,
+            blockers=blockers,
+        )
+
+    manifest = capabilities.capabilities if capabilities else {}
+    declared = {
+        name: value for name, value in manifest.items()
+        if any(token in str(name).lower() for token in capability_names)
+    }
+    if declared:
+        if any(value is True for value in declared.values()):
+            return LayerStatusSummary(status="available", source="AgentGuard capability manifest")
+        return LayerStatusSummary(
+            status="unsupported",
+            reason="AgentGuard capability manifest does not enable this capability.",
+            source="AgentGuard capability manifest",
+        )
+    return LayerStatusSummary(
+        status="unknown",
+        reason="AgentGuard readiness did not report this layer.",
+    )
+
+
 def build_system_status(client: AgentGuardClient, *, data_mode_override: str | None = None) -> SystemStatus:
     agentguard_status: AgentGuardStatus
     capabilities: AgentGuardCapabilities | None = None
@@ -89,6 +151,18 @@ def build_system_status(client: AgentGuardClient, *, data_mode_override: str | N
             warden=WardenStatusSummary(
                 status="unavailable",
                 reason="AgentGuard unreachable; WARDEN status cannot be probed",
+            ),
+            runtime=LayerStatusSummary(
+                status="unavailable", reason="AgentGuard unreachable; runtime status cannot be checked"
+            ),
+            probe_sae=LayerStatusSummary(
+                status="unavailable", reason="AgentGuard unreachable; Probe/SAE status cannot be checked"
+            ),
+            threat_contracts=LayerStatusSummary(
+                status="unavailable", reason="AgentGuard unreachable; contract status cannot be checked"
+            ),
+            artifacts=LayerStatusSummary(
+                status="unavailable", reason="AgentGuard unreachable; artifact status cannot be checked"
             ),
             features=features,
             unavailable_features=features,
@@ -122,8 +196,15 @@ def build_system_status(client: AgentGuardClient, *, data_mode_override: str | N
             reason=str(exc),
         )
 
+    readiness_payload = None
+    try:
+        readiness_payload = client.get_readiness()
+    except AgentGuardError as exc:
+        logger.warning("AgentGuard readiness probe failed: %s [%s]", exc.code, exc.request_id)
+
     warden_available = warden.status == "available"
     data_mode = effective_data_mode(data_mode_override, agentguard_available=True)
+    operations = client.discover_operations()
 
     features: list[FeatureAvailability] = []
     for name, _description in _FEATURES.items():
@@ -137,8 +218,12 @@ def build_system_status(client: AgentGuardClient, *, data_mode_override: str | N
             available = False
             reason = "external defense executor is not verified; unsupported until AgentGuard exposes it"
         elif name == "interaction.graph":
-            available = False
-            reason = "message-level interaction graph API is not yet exposed by AgentGuard public API"
+            available = operations.get("GET /v1/investigations/{request_id}/interaction-graph", False)
+            reason = None if available else (
+                "AgentGuard interaction graph endpoint is unpublished"
+                if client.discovery_error is None
+                else "AgentGuard operation discovery failed; availability is unknown"
+            )
         elif name == "audit.events.read":
             available = True
             reason = (
@@ -157,6 +242,19 @@ def build_system_status(client: AgentGuardClient, *, data_mode_override: str | N
         data_mode=data_mode,
         agentguard=agentguard_status,
         warden=warden,
+        runtime=_layer_status(
+            readiness_payload, capabilities, check_names=("agent_runtime", "model_runtime")
+        ),
+        probe_sae=_layer_status(
+            readiness_payload, capabilities, check_names=("probe", "sae"), capability_names=("probe", "sae")
+        ),
+        threat_contracts=_layer_status(
+            readiness_payload, capabilities, check_names=("threat_contract", "contract_source")
+        ),
+        artifacts=_layer_status(
+            readiness_payload, capabilities, check_names=("artifact", "evidence_gateway"),
+            capability_names=("artifact",),
+        ),
         capabilities=capabilities,
         features=features,
         unavailable_features=unavailable,

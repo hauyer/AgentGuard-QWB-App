@@ -21,8 +21,18 @@ def demo_service() -> DemoService:
 
 
 def test_demo_service_loads_and_verifies_hashes(demo_service: DemoService) -> None:
-    assert demo_service.fixture("investigations.json")["items"]
-    assert demo_service.fixture("graph.json")["nodes"]
+    import json
+
+    index = json.loads((FIXTURES_DIR / "index.json").read_text(encoding="utf-8"))
+    assert len(index["fixtures"]) == 12
+    assert all(
+        item["fixture_id"] and item["source"] and item["agentguard_version"]
+        and item["agentguard_commit"] and item["sanitized"] and item["not_provable"]
+        for item in index["fixtures"]
+    )
+    payloads = [demo_service.fixture(item["file"]) for item in index["fixtures"]]
+    assert payloads[1]["items"]
+    assert payloads[5]["nodes"]
 
 
 def test_demo_service_rejects_tampered_fixture(demo_service: DemoService, tmp_path: Path) -> None:
@@ -35,6 +45,20 @@ def test_demo_service_rejects_tampered_fixture(demo_service: DemoService, tmp_pa
     service = DemoService(target)
     with pytest.raises(DemoFixtureError, match="sha256 mismatch"):
         service.fixture("graph.json")
+
+
+def test_demo_service_rejects_modified_provenance_manifest(tmp_path: Path) -> None:
+    import json
+    import shutil
+
+    target = tmp_path / "fixtures"
+    shutil.copytree(FIXTURES_DIR, target)
+    index_path = target / "index.json"
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    index["fixtures"][0]["source"] = "altered provenance"
+    index_path.write_text(json.dumps(index), encoding="utf-8")
+    with pytest.raises(DemoFixtureError, match="fixture index integrity"):
+        DemoService(target)
 
 
 def test_demo_investigation_pagination(demo_service: DemoService) -> None:

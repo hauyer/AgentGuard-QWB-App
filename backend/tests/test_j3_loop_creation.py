@@ -37,6 +37,7 @@ class LoopCreateUpstream:
         self.loops: list[dict] = []
         self.created: list[dict] = []
         self.idempotent_results: dict[str, dict] = {}
+        self.create_request_ids: list[str | None] = []
         self.create_error: AgentGuardError | None = None
         self.accept_before_error = False
         self.investigation_status = "completed"
@@ -73,8 +74,11 @@ class LoopCreateUpstream:
             "next_offset": offset + len(items) if len(items) == limit else None,
         }
 
-    def create_investigation_loop(self, payload: dict, *, idempotency_key: str) -> dict:
+    def create_investigation_loop(
+        self, payload: dict, *, idempotency_key: str, request_id: str | None = None,
+    ) -> dict:
         self.calls.append(("create", idempotency_key, dict(payload)))
+        self.create_request_ids.append(request_id)
         if idempotency_key in self.idempotent_results:
             return dict(self.idempotent_results[idempotency_key])
         if self.create_error:
@@ -290,12 +294,14 @@ def test_timeout_is_persisted_ambiguous_and_never_blindly_reposted(loop_create_e
         assert row is not None
         assert row.status == "SUBMISSION_AMBIGUOUS"
         idempotency_key = row.idempotency_key
+        stable_request_id = row.submission_id
 
     replay = _submit(client, body)
     assert replay.status_code == 503
     assert replay.json()["submission"]["status"] == "SUBMISSION_AMBIGUOUS"
     assert len([call for call in upstream.calls if call[0] == "create"]) == 1
     assert idempotency_key == next(call[1] for call in upstream.calls if call[0] == "create")
+    assert upstream.create_request_ids == [stable_request_id]
 
 
 def test_operator_resume_uses_same_upstream_key_to_recover_accepted_loop(loop_create_env) -> None:
@@ -312,6 +318,7 @@ def test_operator_resume_uses_same_upstream_key_to_recover_accepted_loop(loop_cr
         submission = session.scalar(select(InvestigationLoopSubmission))
         assert submission is not None
         stable_key = submission.idempotency_key
+        stable_request_id = submission.submission_id
 
     upstream.create_error = None
     upstream.accept_before_error = False
@@ -326,6 +333,7 @@ def test_operator_resume_uses_same_upstream_key_to_recover_accepted_loop(loop_cr
     create_calls = [call for call in upstream.calls if call[0] == "create"]
     assert [call[1] for call in create_calls] == [stable_key, stable_key]
     assert create_calls[0][2] == create_calls[1][2]
+    assert upstream.create_request_ids == [stable_request_id, stable_request_id]
     assert len(upstream.created) == 1
     with Session(get_engine(settings)) as session:
         mapping = session.scalar(select(ProjectInvestigationLoop))

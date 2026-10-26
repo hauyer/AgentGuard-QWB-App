@@ -1,6 +1,6 @@
 import { cn } from "../../utils/cn";
 
-export type EvidenceLevel = "synthetic" | "observational" | "interventional" | "causal_validated";
+export type EvidenceLevel = "synthetic" | "observational" | "interventional" | "causal_validated" | "unknown";
 
 const LEVEL_META: Record<
   EvidenceLevel,
@@ -25,6 +25,11 @@ const LEVEL_META: Record<
     label: "CAUSAL_VALIDATED",
     className: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
     description: "经过因果验证（必须附带验证依据）",
+  },
+  unknown: {
+    label: "UNKNOWN",
+    className: "bg-slate-100 text-slate-600 ring-slate-500/20",
+    description: "上游未提供可识别的证据等级",
   },
 };
 

@@ -117,7 +117,7 @@
       "agentguard_version": "1.1.0rc1",
       "agentguard_commit": "3c34931f983b545c77ee79f866425eb63053807b",
       "sanitized": true,
-      "sha256": "a674c66754a3b004bb05fd940c606c8a98c36a88e606021c3c48afc9669cf8d3",
+      "sha256": "f15529c5fd559389e506faae4c4595e518ba259c0fa1768cb3e4f771876eb719",
       "capabilities": [
         "experiments.compare"
       ],

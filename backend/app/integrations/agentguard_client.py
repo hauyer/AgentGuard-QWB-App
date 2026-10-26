@@ -1,11 +1,11 @@
 """Unified AgentGuard API client (BFF connector).
 
-Contract baseline (I7): AgentGuard commit cd3e9f3f26504f74f347656e97913f55c5db8b4a
-(feature/i-reliability-and-live-validation, API source 66dae883fb75cf90ef735b94d2f5c9b565ba5ad3,
-1.1.0rc1; 84 OpenAPI paths). It includes persisted investigation loops and
-strategy evaluation records. Capability discovery below guards every tracked
-operation so deployments on older pins degrade explicitly. Prior baselines:
-3c34931 (D7), 907aa19 (C2), 7d42809 (A8).
+Contract baseline (RC2): AgentGuard commit 63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc
+(feature/i-reliability-and-live-validation, API snapshot source at the same commit,
+1.1.0rc2; 86 OpenAPI paths). The 33 App-supported operations are schema-compatible
+with the retained 1.1.0rc1 snapshot. RC2 identity and query-only Loop reconciliation
+remain static-only candidates and are not exposed by this client. Capability
+discovery guards tracked operations so older pins degrade explicitly.
 
 Safety rules enforced here (mirror the upstream SDK contract):
   * upstream origin is fixed by server config; callers cannot choose arbitrary hosts
@@ -21,7 +21,9 @@ Safety rules enforced here (mirror the upstream SDK contract):
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import Mapping
@@ -39,6 +41,36 @@ GET_RETRY_BACKOFF_SECONDS = (0.5, 1.0)
 RETRYABLE_GET_STATUS = {502, 503, 504}
 
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+_SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+_SAFE_ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+_SAFE_MESSAGES = {
+    "WARDEN_NOT_CONFIGURED": "WARDEN is not configured on the AgentGuard service.",
+    "LOOP_IDEMPOTENCY_CONFLICT": "This Loop idempotency key conflicts with an earlier request.",
+    "EVALUATION_ARTIFACT_UNAVAILABLE": "The strategy evaluation artifact is unavailable.",
+}
+
+
+def _safe_request_id(value: str | None) -> str | None:
+    return value if value and _SAFE_REQUEST_ID.fullmatch(value) else None
+
+
+def _safe_error_code(value: Any) -> str:
+    candidate = value if isinstance(value, str) else ""
+    return candidate if _SAFE_ERROR_CODE.fullmatch(candidate) else "API_REQUEST_REJECTED"
+
+
+def _safe_error_message(status_code: int, code: str) -> str:
+    if code in _SAFE_MESSAGES:
+        return _SAFE_MESSAGES[code]
+    return {
+        401: "AgentGuard rejected authentication.",
+        403: "AgentGuard denied this operation.",
+        404: "The requested AgentGuard resource was not found.",
+        409: "The AgentGuard request conflicts with existing state.",
+        410: "The requested AgentGuard resource is unavailable.",
+        422: "AgentGuard rejected the request validation.",
+        429: "AgentGuard is rate limiting requests.",
+    }.get(status_code, "AgentGuard returned an upstream error.")
 
 
 class AgentGuardError(RuntimeError):
@@ -118,6 +150,8 @@ class AgentGuardClient:
             "Accept": "application/json",
             "X-Request-ID": request_id or str(uuid.uuid4()),
         }
+        if _safe_request_id(headers["X-Request-ID"]) is None:
+            raise ValueError("request_id contains unsupported characters or exceeds 128 characters")
         if self._settings.agentguard_api_token:
             headers["X-AgentGuard-Token"] = self._settings.agentguard_api_token
         if operator and self._settings.agentguard_operator_api_token:
@@ -142,8 +176,8 @@ class AgentGuardClient:
                     raise
                 delay = GET_RETRY_BACKOFF_SECONDS[min(attempt - 1, len(GET_RETRY_BACKOFF_SECONDS) - 1)]
                 logger.warning(
-                    "AgentGuard GET %s failed (attempt %s/%s) with %s; retrying in %.1fs",
-                    path, attempt, GET_RETRY_ATTEMPTS + 1, exc.code, delay,
+                    "AgentGuard GET failed (attempt %s/%s) with %s; retrying in %.1fs",
+                    attempt, GET_RETRY_ATTEMPTS + 1, exc.code, delay,
                 )
                 time.sleep(delay)
 
@@ -156,65 +190,83 @@ class AgentGuardClient:
         params: dict[str, Any],
         json_body: dict[str, Any] | None,
     ) -> dict[str, Any]:
+        request_id = headers["X-Request-ID"]
         try:
-            response = self._http.request(method, path, headers=headers, params=params, json=json_body)
+            with self._http.stream(method, path, headers=headers, params=params, json=json_body) as response:
+                response_request_id = _safe_request_id(response.headers.get("X-Request-ID")) or request_id
+                if 300 <= response.status_code < 400:
+                    raise AgentGuardError(
+                        502, "API_REDIRECT_REJECTED", "AgentGuard returned an unexpected redirect", response_request_id
+                    )
+
+                content_length = response.headers.get("Content-Length")
+                if content_length:
+                    try:
+                        if int(content_length) > MAX_RESPONSE_BYTES:
+                            raise AgentGuardError(
+                                502, "API_RESPONSE_TOO_LARGE", "AgentGuard API response exceeded the size limit",
+                                response_request_id,
+                            )
+                    except ValueError:
+                        # Ignore malformed Content-Length and enforce the streaming limit below.
+                        pass
+
+                raw = bytearray()
+                for chunk in response.iter_bytes(chunk_size=64 * 1024):
+                    if len(raw) + len(chunk) > MAX_RESPONSE_BYTES:
+                        raise AgentGuardError(
+                            502, "API_RESPONSE_TOO_LARGE", "AgentGuard API response exceeded the size limit",
+                            response_request_id,
+                        )
+                    raw.extend(chunk)
+
+                payload: Any = {}
+                if raw:
+                    try:
+                        payload = json.loads(raw)
+                    except (ValueError, UnicodeDecodeError) as exc:
+                        raise AgentGuardError(
+                            502, "API_BAD_RESPONSE", "AgentGuard returned an invalid response",
+                            response_request_id,
+                        ) from exc
+                if not isinstance(payload, dict):
+                    raise AgentGuardError(
+                        502, "API_BAD_RESPONSE", "AgentGuard returned an invalid response",
+                        response_request_id,
+                    )
+                if (
+                    method in _SAFE_METHODS
+                    and 500 <= response.status_code < 600
+                    and response.status_code in RETRYABLE_GET_STATUS
+                ):
+                    raise _TransientStatus(response.status_code, payload, response_request_id)
+                if not 200 <= response.status_code < 300:
+                    detail = payload.get("detail")
+                    if not isinstance(detail, dict):
+                        detail = {}
+                    code = _safe_error_code(detail.get("error"))
+                    response_request_id = (
+                        response_request_id or _safe_request_id(detail.get("request_id")) or request_id
+                    )
+                    raise AgentGuardError(
+                        response.status_code,
+                        code,
+                        _safe_error_message(response.status_code, code),
+                        response_request_id,
+                    )
+                return payload
         except httpx.TimeoutException as exc:
             raise AgentGuardUnavailable(
-                0, "API_UNREACHABLE", f"AgentGuard API request timed out: {type(exc).__name__}"
+                0, "API_UNREACHABLE", "AgentGuard API request timed out", request_id
             ) from exc
         except httpx.NetworkError as exc:
             raise AgentGuardUnavailable(
-                0, "API_UNREACHABLE", f"AgentGuard API request failed: {type(exc).__name__}"
+                0, "API_UNREACHABLE", "AgentGuard API connection failed", request_id
             ) from exc
         except httpx.HTTPError as exc:
             raise AgentGuardUnavailable(
-                0, "API_UNREACHABLE", f"AgentGuard API request failed: {type(exc).__name__}"
+                0, "API_UNREACHABLE", "AgentGuard API request failed", request_id
             ) from exc
-
-        response_request_id = response.headers.get("X-Request-ID")
-        raw = response.content
-        if len(raw) > MAX_RESPONSE_BYTES:
-            raise AgentGuardError(
-                response.status_code,
-                "API_RESPONSE_TOO_LARGE",
-                f"AgentGuard API response exceeded {MAX_RESPONSE_BYTES} bytes",
-                response_request_id,
-            )
-        payload: Any = {}
-        if raw:
-            try:
-                payload = response.json()
-            except (ValueError, UnicodeDecodeError) as exc:
-                raise AgentGuardError(
-                    response.status_code,
-                    "API_BAD_RESPONSE",
-                    "AgentGuard API returned invalid JSON",
-                    response_request_id,
-                ) from exc
-        if not isinstance(payload, dict):
-            raise AgentGuardError(
-                response.status_code,
-                "API_BAD_RESPONSE",
-                "AgentGuard API response must be a JSON object",
-                response_request_id,
-            )
-        if (
-            method in _SAFE_METHODS
-            and 500 <= response.status_code < 600
-            and response.status_code in RETRYABLE_GET_STATUS
-        ):
-            raise _TransientStatus(response.status_code, payload, response_request_id)
-        if not 200 <= response.status_code < 300:
-            detail = payload.get("detail")
-            if not isinstance(detail, dict):
-                detail = {"message": "AgentGuard API request was rejected"}
-            raise AgentGuardError(
-                response.status_code,
-                str(detail.get("error", "API_REQUEST_REJECTED")),
-                str(detail.get("message", detail.get("error", "AgentGuard API request was rejected"))),
-                response_request_id or detail.get("request_id"),
-            )
-        return payload
 
     # ------------------------------------------------------------------ #
     # typed business methods (mirror AgentGuard sdk.py)
@@ -397,6 +449,7 @@ class AgentGuardClient:
         payload: Mapping[str, Any],
         *,
         idempotency_key: str,
+        request_id: str | None = None,
     ) -> dict[str, Any]:
         """Create one loop with the separate Operator credential and stable key.
 
@@ -407,6 +460,7 @@ class AgentGuardClient:
             "POST",
             "/v1/investigation-loops",
             body=payload,
+            request_id=request_id,
             operator=True,
             loop_idempotency_key=idempotency_key,
         )
@@ -475,13 +529,8 @@ class _TransientStatus(AgentGuardError):
 
     def __init__(self, status_code: int, payload: dict[str, Any], request_id: str | None) -> None:
         detail = payload.get("detail")
-        code = detail.get("error", "API_TRANSIENT") if isinstance(detail, dict) else "API_TRANSIENT"
-        message = (
-            detail.get("message", detail.get("error", "AgentGuard API returned a transient failure"))
-            if isinstance(detail, dict)
-            else "AgentGuard API returned a transient failure"
-        )
-        super().__init__(status_code, str(code), str(message), request_id)
+        code = _safe_error_code(detail.get("error")) if isinstance(detail, dict) else "API_REQUEST_REJECTED"
+        super().__init__(status_code, code, _safe_error_message(status_code, code), request_id)
 
 
 def _quote(value: str) -> str:

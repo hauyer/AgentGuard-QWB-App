@@ -49,5 +49,7 @@ export interface GraphResponse {
     /** B13 upstream C1 self-reported availability (absent in demo fixtures) */
     upstream_available?: boolean;
     upstream_data_status?: string | null;
+    /** The App applied its explicit graph display limit; this is an incomplete view. */
+    truncated?: boolean;
   };
 }

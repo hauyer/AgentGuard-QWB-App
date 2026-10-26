@@ -135,11 +135,11 @@ jobs:
         run: python scripts/check_agentguard_contract.py --offline-only
 
   live-smoke:
-    name: Live AgentGuard smoke (optional, explicit)
+    name: AgentGuard HTTP smoke (optional, read-only by default)
     runs-on: ubuntu-latest
-    # Real-service verification runs only when a live AgentGuard endpoint is
-    # provided via repository/environment variables. Without it the job is
-    # skipped and reported as such - never counted as a passing live test.
+    # HTTP compatibility checks run only when a service endpoint is configured.
+    # The script does not assert WARDEN execution and never sends writes unless
+    # an operator explicitly adds --allow-write in an isolated service.
     if: ${{ vars.AGENTGUARD_LIVE_BASE_URL != '' }}
     steps:
       - uses: actions/checkout@v4
@@ -148,6 +148,9 @@ jobs:
           python-version: "3.11"
       - name: Run live integration check (strict verdicts)
         run: python scripts/live_agentguard_check.py --base-url "${{ vars.AGENTGUARD_LIVE_BASE_URL }}"
+        env:
+          AGENTGUARD_API_TOKEN: ${{ secrets.AGENTGUARD_API_TOKEN }}
+          AGENTGUARD_OPERATOR_TOKEN: ${{ secrets.AGENTGUARD_OPERATOR_TOKEN }}
 
   docker:
     name: Docker builds

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -17,12 +18,33 @@ SPEC.loader.exec_module(contract_check)
 
 def test_checked_in_snapshot_matches_the_pin() -> None:
     openapi = contract_check.validate_snapshot()
-    assert len(openapi["paths"]) == 84
+    assert len(openapi["paths"]) == 86
     operations = contract_check._operations(openapi)
     assert "POST /v1/investigation-loops" in operations
     assert "GET /v1/research/strategy-evaluations" in operations
     assert "GET /v1/research/strategy-evaluations/{evaluation_id}" in operations
+    assert "GET /v1/system/identity" in operations
+    assert "POST /v1/investigation-loops/{loop_id}/reconcile" in operations
+    contract = contract_check.load_contract()
+    assert "GET /v1/system/identity" not in contract["supported_endpoints"]
+    assert "POST /v1/investigation-loops/{loop_id}/reconcile" not in contract["supported_endpoints"]
     contract_check._validate_live_shapes(openapi, contract_check.load_contract())
+
+
+def test_rc2_diff_matches_retained_rc1_snapshot() -> None:
+    contract = contract_check.load_contract()
+    openapi = contract_check.validate_snapshot(contract)
+    contract_check._validate_pinned_diff(openapi, contract)
+
+
+def test_pinned_diff_rejects_supported_response_drift() -> None:
+    contract = contract_check.load_contract()
+    openapi = deepcopy(contract_check.validate_snapshot(contract))
+    openapi["paths"]["/v1/investigations"]["post"]["responses"]["200"] = {
+        "description": "unexpected response contract"
+    }
+    with pytest.raises(ValueError, match="supported operation changed responses"):
+        contract_check._validate_pinned_diff(openapi, contract)
 
 
 def test_snapshot_digest_mismatch_fails_closed() -> None:

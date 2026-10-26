@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.integrations.agentguard_client import AgentGuardClient
 from app.main import create_app
+from app.services.graph_service import MAX_GRAPH_NODES, _to_app_graph, _validated_graph
 from tests.conftest import make_settings
 
 _open_clients: list[TestClient] = []
@@ -89,3 +90,23 @@ def test_graph_samples_live_unavailable(stub_base_url_warden_available: str) -> 
     response = client.get("/api/interaction-graph/samples")
     assert response.status_code == 503
     assert response.json()["detail"]["error"] == "GRAPH_API_UNAVAILABLE"
+
+
+def test_live_graph_omits_edges_without_source_provenance_and_caps_nodes() -> None:
+    nodes = [{"node_id": f"node-{index}"} for index in range(MAX_GRAPH_NODES + 1)]
+    payload = {
+        "available": True,
+        "nodes": nodes,
+        "edges": [
+            {"source": "node-0", "target": "node-1", "event_type": "message"},
+            {"source": "node-0", "target": "node-1", "message_id": "msg-real-1", "event_type": "message"},
+            {"source": "node-499", "target": "node-500", "message_id": "msg-truncated-node"},
+        ],
+        "limitations": [],
+    }
+    graph = _to_app_graph(_validated_graph(payload))
+    assert len(graph["nodes"]) == MAX_GRAPH_NODES
+    assert [edge["id"] for edge in graph["edges"]] == ["msg-real-1"]
+    assert graph["truncated"] is True
+    assert any("GRAPH_TRUNCATED" in note for note in graph["not_provable"])
+    assert any("GRAPH_EDGES_WITHOUT_PROVENANCE_OMITTED" in note for note in graph["not_provable"])

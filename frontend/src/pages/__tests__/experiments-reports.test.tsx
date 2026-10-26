@@ -21,11 +21,20 @@ const experimentsResponse = {
       investigation_strategy: "causal_audit",
       defense_strategy: "whitelist-block",
       execution_status: "completed",
+      metrics_available: true,
       risk_indicators: { high_risk_paths: 2, tool_abuse_calls: 3, injection_messages: 1 },
       utility: { normal_task_success_rate: 0.98 },
       budget: { tokens: 18400, cost_usd: 0.92, time_seconds: 160 },
       result_source: "recorded:run-qwb-0001",
       created_at: "2026-10-20T09:14:40+08:00",
+    },
+    {
+      experiment_id: "exp-qwb-no-metrics",
+      run_id: "run-qwb-no-metrics",
+      execution_status: "completed",
+      metrics_available: false,
+      risk_indicators: { high_risk_paths: 9 },
+      utility: { normal_task_success_rate: 0.77 },
     },
   ],
 };
@@ -112,6 +121,14 @@ describe("ExperimentsPage", () => {
     expect(screen.getByText("98%")).toBeInTheDocument();
     expect(screen.getByText(/18400 \/ 160s/)).toBeInTheDocument();
     expect(screen.getByText(/recorded:run-qwb-0001/)).toBeInTheDocument();
+  });
+
+  it("hides metric values when the upstream marks metrics unavailable", async () => {
+    mockFetch(experimentsResponse);
+    renderWithProviders(<ExperimentsPage />);
+    expect(await screen.findByText("exp-qwb-no-metrics")).toBeInTheDocument();
+    expect(screen.queryByText("77%")).not.toBeInTheDocument();
+    expect(screen.getAllByText("指标不可用")).toHaveLength(2);
   });
 
   it("shows explicit live unavailable without trend charts", async () => {

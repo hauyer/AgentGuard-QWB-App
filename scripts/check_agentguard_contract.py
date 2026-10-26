@@ -166,6 +166,64 @@ def _validate_live_shapes(openapi: dict, contract: dict) -> None:
             _validate_422_response(openapi, operation_key, custom=operation_key in custom_operations)
 
 
+def _validate_pinned_diff(openapi: dict, contract: dict) -> None:
+    """Verify the declared OpenAPI delta against the retained previous pin."""
+    previous = contract.get("previous_contract")
+    diff = contract.get("openapi_diff")
+    if not isinstance(previous, dict) or not isinstance(diff, dict):
+        raise ValueError("previous OpenAPI pin and diff declaration are required")
+
+    previous_path = (ROOT / previous["snapshot"]).resolve()
+    try:
+        previous_path.relative_to(ROOT.resolve())
+    except ValueError as exc:
+        raise ValueError("previous OpenAPI snapshot must be inside the QWB-App checkout") from exc
+    if not previous_path.is_file():
+        raise ValueError(f"previous OpenAPI snapshot is missing: {previous_path}")
+    previous_raw = previous_path.read_bytes()
+    if hashlib.sha256(previous_raw).hexdigest() != previous["raw_sha256"]:
+        raise ValueError("previous OpenAPI snapshot raw SHA-256 mismatch")
+    old = json.loads(previous_raw.decode("utf-8"))
+    old_canonical = hashlib.sha256(json.dumps(old, sort_keys=True).encode("utf-8")).hexdigest()
+    if old_canonical != previous["canonical_sha256"]:
+        raise ValueError("previous OpenAPI snapshot canonical SHA-256 mismatch")
+    if len(old.get("paths", {})) != previous["path_count"]:
+        raise ValueError("previous OpenAPI snapshot path count mismatch")
+
+    old_operations = _operations(old)
+    new_operations = _operations(openapi)
+    actual_added = sorted(new_operations - old_operations)
+    actual_removed = sorted(old_operations - new_operations)
+    if actual_added != sorted(diff.get("added_operations", [])):
+        raise ValueError(f"OpenAPI added-operation diff mismatch: {actual_added}")
+    if actual_removed != sorted(diff.get("removed_operations", [])):
+        raise ValueError(f"OpenAPI removed-operation diff mismatch: {actual_removed}")
+
+    supported = set(contract["supported_endpoints"])
+    for operation_key in sorted(supported & old_operations & new_operations):
+        method, path = operation_key.split(" ", 1)
+        before = old["paths"][path][method.lower()]
+        after = openapi["paths"][path][method.lower()]
+        for component in diff.get("assert_unchanged_for_supported", []):
+            if before.get(component) != after.get(component):
+                raise ValueError(f"supported operation changed {component}: {operation_key}")
+
+    candidate_operations = {
+        item["operation"]
+        for item in contract.get("candidate_endpoints", {}).get("published_not_exposed", [])
+    }
+    if not candidate_operations <= new_operations:
+        raise ValueError("a candidate endpoint is absent from the pinned OpenAPI snapshot")
+    if candidate_operations & supported:
+        raise ValueError("candidate endpoints must not also be marked supported by the App")
+    for item in contract.get("candidate_endpoints", {}).get("not_published", []):
+        if item["operation"] in new_operations:
+            raise ValueError(f"endpoint marked not published is present: {item['operation']}")
+    for item in contract.get("capability_status", {}).get("published_but_not_app_supported", []):
+        if item["operation"] not in new_operations or item["operation"] in supported:
+            raise ValueError(f"invalid published-but-not-supported operation: {item['operation']}")
+
+
 def validate_snapshot(contract: dict | None = None) -> dict:
     """Validate the checked-in snapshot against the immutable pin metadata."""
     contract = contract or load_contract()
@@ -279,6 +337,7 @@ def validate_snapshot(contract: dict | None = None) -> dict:
     auth = contract.get("auth", {})
     if auth.get("general") != "X-AgentGuard-Token" or auth.get("operator") != "X-AgentGuard-Operator-Token":
         raise ValueError("pinned authentication header contract is missing or changed")
+    _validate_pinned_diff(openapi, contract)
     return openapi
 
 

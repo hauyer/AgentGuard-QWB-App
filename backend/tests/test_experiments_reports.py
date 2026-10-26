@@ -44,6 +44,7 @@ def test_experiments_demo_serves_fixture() -> None:
     assert item["investigation_strategy"] == "causal_audit"
     assert item["defense_strategy"] == "whitelist-block"
     assert item["utility"]["normal_task_success_rate"] == 0.98
+    assert item["metrics_available"] is True
     assert item["budget"]["tokens"] == 18400
     assert item["result_source"].startswith("recorded:")
 
@@ -59,6 +60,8 @@ def test_experiments_live_uses_published_index(stub_base_url_warden_available: s
     assert body["meta"]["data_mode"] == "live"
     assert body["meta"]["capability"] == "available"
     assert isinstance(body["items"], list) and body["items"]
+    unavailable = next(item for item in body["items"] if item["metrics_available"] is False)
+    assert "utility" not in unavailable or unavailable["utility"] is None
 
 
 def test_experiments_live_503_when_capability_absent() -> None:

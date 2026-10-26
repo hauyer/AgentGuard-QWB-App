@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-EvidenceLevel = Literal["synthetic", "observational", "interventional", "causal_validated"]
+EvidenceLevel = Literal["synthetic", "observational", "interventional", "causal_validated", "unknown"]
 VerificationStatus = Literal["verified", "unverified", "blocked", "failed", "unsupported"]
 
 EVIDENCE_LEVELS = ("synthetic", "observational", "interventional", "causal_validated")
@@ -30,7 +30,10 @@ def normalize_evidence_item(item: dict[str, Any]) -> dict[str, Any]:
         "scenario_id": item.get("scenario_id"),
         "artifact_refs": item.get("artifact_refs") or [],
         "evidence_type": item.get("evidence_type"),
-        "evidence_level": item.get("evidence_level") if item.get("evidence_level") in EVIDENCE_LEVELS else "synthetic",
+        # Missing or future values must stay unknown. Treating them as
+        # synthetic would falsely claim provenance just as surely as inflating
+        # them to a stronger evidence level.
+        "evidence_level": item.get("evidence_level") if item.get("evidence_level") in EVIDENCE_LEVELS else "unknown",
         "risk_type": item.get("risk_type"),
         "confidence": item.get("confidence"),
         "limitations": item.get("limitations") or [],

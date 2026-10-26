@@ -37,6 +37,10 @@ def test_status_unavailable_when_agentguard_unreachable(unreachable_base_url) ->
     assert body["agentguard"]["reachable"] is False
     assert body["agentguard"]["error"]["code"] == "API_UNREACHABLE"
     assert body["warden"]["status"] == "unavailable"
+    assert body["runtime"]["status"] == "unavailable"
+    assert body["probe_sae"]["status"] == "unavailable"
+    assert body["threat_contracts"]["status"] == "unavailable"
+    assert body["artifacts"]["status"] == "unavailable"
     assert body["capabilities"] is None
     assert all(not feature["available"] for feature in body["features"])
     # Never fabricate a version when upstream is unreachable.
@@ -52,11 +56,16 @@ def test_status_live_when_agentguard_and_warden_available(stub_base_url_warden_a
     assert body["agentguard"]["reachable"] is True
     assert body["agentguard"]["health"]["version"] == "1.1.0rc1"
     assert body["warden"]["status"] == "available"
+    assert body["runtime"]["status"] == "blocked"
+    assert body["probe_sae"]["status"] == "unsupported"
+    assert body["threat_contracts"]["status"] == "unknown"
+    assert "NO_THREAT_CONTRACTS" in body["threat_contracts"]["blockers"]
+    assert body["artifacts"]["status"] == "unknown"
     assert body["capabilities"]["backend_mode"] == "synthetic"
     by_name = {feature["name"]: feature for feature in body["features"]}
     assert by_name["investigations.create"]["available"] is True
     assert by_name["defense.execute"]["available"] is False
-    assert by_name["interaction.graph"]["available"] is False
+    assert by_name["interaction.graph"]["available"] is True
 
 
 def test_warden_not_marked_available_from_health_alone(stub_base_url) -> None:

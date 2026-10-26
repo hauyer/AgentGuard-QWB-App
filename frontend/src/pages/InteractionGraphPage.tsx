@@ -84,12 +84,10 @@ function GraphNodeView({ data }: NodeProps<FlowNode<GraphNodeData>>) {
 
 const nodeTypes = { graphNode: GraphNodeView };
 
-/** Deterministic layout on a 5x5 grid derived from the node id hash. */
-function layoutPosition(id: string): { x: number; y: number } {
-  let hash = 0;
-  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
-  const col = hash % 5;
-  const row = Math.floor(hash / 5) % 5;
+/** Bounded deterministic grid; node index avoids collisions from a small hash grid. */
+function layoutPosition(index: number): { x: number; y: number } {
+  const col = index % 10;
+  const row = Math.floor(index / 10);
   return { x: 60 + col * 260, y: 60 + row * 140 };
 }
 
@@ -134,10 +132,10 @@ function InteractionGraphView() {
       const pathNodeSet = new Set(path?.node_ids ?? []);
       return (graph?.nodes ?? [])
         .filter((node) => filterPasses(node.risk, node.timestamp, node.type))
-        .map((node) => ({
+        .map((node, index) => ({
           id: node.id,
           type: "graphNode",
-          position: layoutPosition(node.id),
+          position: layoutPosition(index),
           data: {
             label: node.label,
             risk: node.risk,
@@ -226,6 +224,12 @@ function InteractionGraphView() {
       />
 
       <DemoBanner meta={data.meta} />
+
+      {graph?.truncated && (
+        <p className="text-xs text-amber-700">
+          图谱视图已截断：最多显示 500 个节点和 2,000 条有来源的边，当前视图不代表完整图谱。
+        </p>
+      )}
 
       {graph?.not_provable?.map((note) => (
         <p key={note} className="text-xs text-amber-700">

@@ -27,6 +27,10 @@ const liveSystem: SystemStatus = {
     },
   },
   warden: { status: "available", base_url: "http://stub-warden:9100" },
+  runtime: { status: "blocked", reason: "COMPONENT_UNAVAILABLE:agent.runtime" },
+  probe_sae: { status: "unknown", reason: "AgentGuard readiness did not report this layer." },
+  threat_contracts: { status: "unknown", blockers: ["NO_THREAT_CONTRACTS"] },
+  artifacts: { status: "unknown", reason: "No verified artifact status." },
   features: [
     { name: "investigations.create", available: true, reason: null },
     { name: "defense.execute", available: false, reason: "unsupported" },
@@ -150,6 +154,9 @@ describe("SystemOverviewPage", () => {
     );
     expect(await screen.findByText("AgentGuard")).toBeInTheDocument();
     expect(await screen.findByText("WARDEN 内核")).toBeInTheDocument();
+    expect(await screen.findByText("Probe / SAE")).toBeInTheDocument();
+    expect(screen.getByText("COMPONENT_UNAVAILABLE:agent.runtime")).toBeInTheDocument();
+    expect(screen.getByText("NO_THREAT_CONTRACTS")).toBeInTheDocument();
     expect(await screen.findByText("可用")).toBeInTheDocument();
     expect(await screen.findByText("调查概况")).toBeInTheDocument();
     expect(await screen.findByText("6")).toBeInTheDocument();

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.integrations.agentguard_client import AgentGuardClient
 from app.main import create_app
+from app.schemas.evidence import normalize_evidence_item
 from tests.conftest import make_settings
 
 _open_clients: list[TestClient] = []
@@ -64,6 +65,11 @@ def test_evidence_unavailable_without_demo() -> None:
     response = client.get("/api/evidence", params={"request_id": "inv-qwb-0001"})
     assert response.status_code == 503
     assert response.json()["detail"]["error"] == "API_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("item", [{}, {"evidence_level": "future_level"}])
+def test_missing_or_unrecognized_evidence_level_stays_unknown(item: dict) -> None:
+    assert normalize_evidence_item(item)["evidence_level"] == "unknown"
 
 
 # ------------------------------------------------------------------ #

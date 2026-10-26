@@ -99,6 +99,7 @@ def submit_loop(
         upstream_result = client.create_investigation_loop(
             upstream_payload,
             idempotency_key=row.idempotency_key,
+            request_id=row.submission_id,
         )
     except AgentGuardError as exc:
         ambiguous = exc.status_code >= 500 or exc.status_code <= 0
@@ -514,6 +515,7 @@ def _retry_ambiguous_with_idempotency(
         upstream_result = client.create_investigation_loop(
             stored_payload,
             idempotency_key=row.idempotency_key,
+            request_id=row.submission_id,
         )
     except (AgentGuardError, json.JSONDecodeError) as exc:
         code = exc.code if isinstance(exc, AgentGuardError) else "SUBMISSION_STATE_INVALID"

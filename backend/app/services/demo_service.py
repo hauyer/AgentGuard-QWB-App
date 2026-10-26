@@ -11,9 +11,12 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+PINNED_FIXTURE_INDEX_SHA256 = "5ef5d0bacd3b574aa007c5391e5d9983092a4f292412f0c3cb2f304b098efdce"
+_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 class DemoFixtureError(RuntimeError):
@@ -36,11 +39,55 @@ class DemoService:
         return item
 
     def _load_index(self) -> None:
-        index_path = self._dir / "index.json"
+        root = self._dir.resolve()
+        index_path = (root / "index.json").resolve()
+        try:
+            index_path.relative_to(root)
+        except ValueError as exc:
+            raise DemoFixtureError("fixture index must stay inside the fixture directory") from exc
         if not index_path.is_file():
             raise DemoFixtureError(f"fixture index missing: {index_path}")
-        index = json.loads(index_path.read_text(encoding="utf-8"))
-        self._index = index.get("fixtures", [])
+        raw = index_path.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest != PINNED_FIXTURE_INDEX_SHA256:
+            raise DemoFixtureError("fixture index integrity check failed: sha256 mismatch")
+        try:
+            index = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise DemoFixtureError("fixture index is not valid UTF-8 JSON") from exc
+        if not isinstance(index, dict) or not isinstance(index.get("fixtures"), list):
+            raise DemoFixtureError("fixture index has an invalid schema")
+        entries = index["fixtures"]
+        seen_files: set[str] = set()
+        seen_ids: set[str] = set()
+        required = {
+            "fixture_id", "file", "data_mode", "source", "collected_at", "agentguard_version",
+            "agentguard_commit", "sanitized", "sha256", "capabilities", "not_provable",
+        }
+        for entry in entries:
+            if not isinstance(entry, dict) or not required <= set(entry):
+                raise DemoFixtureError("fixture index entry is missing required provenance fields")
+            name = entry["file"]
+            fixture_id = entry["fixture_id"]
+            if (
+                not isinstance(name, str) or Path(name).name != name or name in {"", ".", ".."}
+                or not isinstance(fixture_id, str) or not fixture_id
+                or name in seen_files or fixture_id in seen_ids
+            ):
+                raise DemoFixtureError("fixture index contains an unsafe or duplicate identity")
+            if entry["data_mode"] not in {"recorded", "synthetic"}:
+                raise DemoFixtureError(f"fixture {name} must be RECORDED or SYNTHETIC")
+            if not entry["sanitized"] or not _SHA256_RE.fullmatch(str(entry["sha256"])):
+                raise DemoFixtureError(f"fixture {name} has invalid sanitization or SHA-256 metadata")
+            if not all(isinstance(entry[field], str) and entry[field].strip() for field in (
+                "source", "collected_at", "agentguard_version", "agentguard_commit"
+            )):
+                raise DemoFixtureError(f"fixture {name} is missing source provenance")
+            if not isinstance(entry["capabilities"], list) or not isinstance(entry["not_provable"], list):
+                raise DemoFixtureError(f"fixture {name} has invalid capability or limitation metadata")
+            seen_files.add(name)
+            seen_ids.add(fixture_id)
+        self._index = entries
 
     def fixture(self, name: str) -> dict:
         if name in self._cache:
@@ -48,7 +95,12 @@ class DemoService:
         entry = next((item for item in self._index if item["file"] == name), None)
         if entry is None:
             raise DemoFixtureError(f"fixture not registered in index: {name}")
-        path = self._dir / name
+        root = self._dir.resolve()
+        path = (root / name).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError as exc:
+            raise DemoFixtureError("fixture file must stay inside the fixture directory") from exc
         if not path.is_file():
             raise DemoFixtureError(f"fixture file missing: {path}")
         raw = path.read_bytes()

@@ -201,17 +201,22 @@ function ExperimentRow({ item }: { item: Experiment }) {
         <Badge variant="neutral">{item.execution_status ?? "—"}</Badge>
       </td>
       <td className="py-2 pr-3 font-mono text-[11px]">
-        {item.risk_indicators ? JSON.stringify(item.risk_indicators) : "—"}
+        {item.metrics_available === true && item.risk_indicators
+          ? JSON.stringify(item.risk_indicators)
+          : item.metrics_available === false ? "指标不可用" : "未知"}
       </td>
       <td className="py-2 pr-3">
-        {item.utility?.normal_task_success_rate != null
+        {item.metrics_available === true && item.utility?.normal_task_success_rate != null
           ? (item.utility.normal_task_success_rate * 100).toFixed(0) + "%"
-          : "—"}
+          : item.metrics_available === false ? "指标不可用" : "未知"}
       </td>
       <td className="py-2 pr-3 font-mono text-[11px]">
         {item.budget ? `${item.budget.tokens ?? "?"} / ${item.budget.time_seconds ?? "?"}s` : "—"}
       </td>
-      <td className="py-2 font-mono text-[10px] text-slate-400">{item.result_source ?? "—"}</td>
+      <td className="py-2 font-mono text-[10px] text-slate-400">
+        {item.data_source ?? item.result_source ?? "—"}
+        {item.evidence_level && <div>证据：{item.evidence_level}</div>}
+      </td>
     </tr>
   );
 }
