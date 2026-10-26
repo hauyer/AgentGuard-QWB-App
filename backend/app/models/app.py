@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base
@@ -119,6 +119,14 @@ class InvestigationLoopSubmission(Base):
     __table_args__ = (
         UniqueConstraint("project_id", "submission_id", name="uq_project_loop_submission"),
         UniqueConstraint("idempotency_key", name="uq_loop_submission_idempotency_key"),
+        Index(
+            "uq_active_loop_submission_per_base",
+            "project_id",
+            "base_request_id",
+            unique=True,
+            sqlite_where=text("status IN ('PREPARED', 'SUBMITTING', 'SUBMISSION_AMBIGUOUS', 'LINK_PENDING')"),
+            postgresql_where=text("status IN ('PREPARED', 'SUBMITTING', 'SUBMISSION_AMBIGUOUS', 'LINK_PENDING')"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

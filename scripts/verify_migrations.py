@@ -1,4 +1,4 @@
-"""Verify the Alembic migration chain on a fresh SQLite database.
+"""Verify the Alembic migration chain on a fresh SQLite or PostgreSQL database.
 
 Runs upgrade to head, downgrade to base, and upgrade again, then checks that
 every BFF business table (including B9 user credential columns) exists.
@@ -11,17 +11,19 @@ from __future__ import annotations
 
 import argparse
 import os
-import sqlite3
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+from sqlalchemy import create_engine, inspect
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent / "backend"
 
 REQUIRED_TABLES = {
     "alembic_version", "users", "projects", "project_members",
     "project_investigations", "investigation_bookmarks", "report_exports",
+    "project_investigation_loops", "investigation_loop_submissions",
     "demo_scenarios", "ui_preferences", "app_audit_events",
 }
 REQUIRED_USER_COLUMNS = {"password_hash", "is_active"}
@@ -34,7 +36,6 @@ def main() -> int:
 
     if args.database_url:
         url = args.database_url
-        db_path = None
     else:
         db_path = Path(tempfile.mkdtemp()) / "migrate-check.db"
         url = f"sqlite:///{db_path.as_posix()}"
@@ -61,21 +62,26 @@ def main() -> int:
     ok &= alembic("downgrade", "base") == 0
     ok &= alembic("upgrade", "head") == 0
 
-    if db_path is None:
-        print("table presence check only supported for SQLite; skipping schema inspection")
-        return 0 if ok else 1
-
-    conn = sqlite3.connect(db_path)
-    tables = sorted(row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'"))
-    user_cols = sorted(row[1] for row in conn.execute("PRAGMA table_info(users)"))
-    conn.close()
+    engine = create_engine(url)
+    inspector = inspect(engine)
+    tables = sorted(inspector.get_table_names())
+    user_cols = sorted(column["name"] for column in inspector.get_columns("users")) if "users" in tables else []
     print("tables:", tables)
     print("users columns:", user_cols)
     missing = REQUIRED_TABLES - set(tables)
     print("required tables missing:", sorted(missing) if missing else "NONE")
     cols_ok = REQUIRED_USER_COLUMNS <= set(user_cols)
     print("users B9 columns present:", cols_ok)
-    return 0 if (ok and not missing and cols_ok) else 1
+    indexes = inspector.get_indexes("investigation_loop_submissions") if "investigation_loop_submissions" in tables else []
+    active_lock = next((index for index in indexes if index["name"] == "uq_active_loop_submission_per_base"), None)
+    active_lock_ok = bool(
+        active_lock
+        and active_lock.get("unique")
+        and active_lock.get("column_names") == ["project_id", "base_request_id"]
+    )
+    print("unique unresolved-submission lock present:", active_lock_ok)
+    engine.dispose()
+    return 0 if (ok and not missing and cols_ok and active_lock_ok) else 1
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.config import Settings
 from app.core.db import dispose_engine, get_engine
-from app.models.app import ProjectInvestigationLoop
+from app.models.app import InvestigationLoopSubmission, ProjectInvestigationLoop
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -43,6 +43,7 @@ def test_initial_migration_creates_all_app_tables(tmp_path) -> None:
         "project_members",
         "project_investigations",
         "project_investigation_loops",
+        "investigation_loop_submissions",
         "investigation_bookmarks",
         "report_exports",
         "demo_scenarios",
@@ -120,6 +121,21 @@ def test_loop_ownership_migration_matches_orm_and_enforces_constraints(tmp_path)
                 "options": {},
             }
         ]
+        active_lock_indexes = {
+            index["name"]: index
+            for index in inspector.get_indexes("investigation_loop_submissions")
+        }
+        active_lock = active_lock_indexes["uq_active_loop_submission_per_base"]
+        assert bool(active_lock["unique"])
+        assert active_lock["column_names"] == ["project_id", "base_request_id"]
+        orm_active_lock = next(
+            index for index in InvestigationLoopSubmission.__table__.indexes
+            if index.name == "uq_active_loop_submission_per_base"
+        )
+        assert orm_active_lock.unique is True
+        assert tuple(column.name for column in orm_active_lock.columns) == (
+            "project_id", "base_request_id"
+        )
         assert inspector.get_columns("project_investigations")[2]["type"].length == 256
         investigation_columns = {
             column["name"]: column for column in inspector.get_columns("project_investigations")
@@ -199,5 +215,6 @@ def test_upgrade_from_0004_preserves_existing_project_investigation_data(tmp_pat
         assert tuple(investigation) == (
             "legacy-request", "Legacy", "preserve", "verified", "unknown", "legacy-run")
         assert "project_investigation_loops" in set(inspect(verify_engine).get_table_names())
+        assert "investigation_loop_submissions" in set(inspect(verify_engine).get_table_names())
     finally:
         verify_engine.dispose()
