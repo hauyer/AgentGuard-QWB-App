@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, dev, "feature/b9-b10-security-integration", "feature/b11-b17-application-upgrade"]
+    branches: [main, dev, "feature/b9-b10-security-integration", "feature/b11-b17-application-upgrade", "feature/b25-b33-real-integration"]
   pull_request:
 
 jobs:
@@ -35,8 +35,42 @@ jobs:
           python-version: "3.11"
       - name: Install backend
         run: pip install -e "./backend[dev]"
-      - name: Verify 0001 -> 0002 upgrade/downgrade/re-upgrade
+      - name: Verify full migration upgrade/downgrade/re-upgrade
         run: python scripts/verify_migrations.py
+
+  postgres:
+    name: PostgreSQL migrations and application tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: qwb
+          POSTGRES_PASSWORD: qwb-ci-password
+          POSTGRES_DB: qwb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qwb -d qwb_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -e "./backend[dev]"
+      - name: Verify PostgreSQL migrations and active submission constraint
+        env:
+          DATABASE_URL: postgresql+psycopg://qwb:qwb-ci-password@127.0.0.1:5432/qwb_test
+        run: python scripts/verify_migrations.py --database-url "$DATABASE_URL"
+      - name: Run PostgreSQL loop concurrency tests
+        env:
+          QWB_TEST_POSTGRES_URL: postgresql+psycopg://qwb:qwb-ci-password@127.0.0.1:5432/qwb_test
+        run: python -m pytest backend/tests/test_postgres_loop_concurrency.py -q
 
   frontend:
     name: Frontend typecheck + lint + tests + build
@@ -82,16 +116,9 @@ jobs:
         run: npm ci
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
-      - name: Start BFF
+      - name: Install backend deps for isolated E2E server
         working-directory: backend
-        run: |
-          pip install -e ".[dev]"
-          nohup uvicorn app.main:app --host 127.0.0.1 --port 8001 > /tmp/bff.log 2>&1 &
-          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8001/api/health && break; sleep 1; done
-      - name: Start frontend
-        run: |
-          nohup npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/frontend.log 2>&1 &
-          for i in $(seq 1 30); do curl -sf http://127.0.0.1:5173/ && break; sleep 1; done
+        run: pip install -e ".[dev]"
       - name: Run E2E
         run: npx playwright test
 
@@ -105,7 +132,7 @@ jobs:
           python-version: "3.11"
       - name: Run contract check
         # Exit code 42 = live AgentGuard unreachable => SKIP (never a false pass).
-        run: python scripts/check_agentguard_contract.py || test $? -eq 42
+        run: python scripts/check_agentguard_contract.py --offline-only
 
   live-smoke:
     name: Live AgentGuard smoke (optional, explicit)
