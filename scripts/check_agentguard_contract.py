@@ -3,8 +3,10 @@
 Usage:
     python scripts/check_agentguard_contract.py [--base-url URL] [--token TOKEN]
 
-The repository snapshot, its canonical hash, endpoint inventory and key request
-shape are checked on every run. The optional live check then verifies the
+The repository snapshot, its raw and canonical hashes, endpoint inventory and
+key request shape are checked on every run. Canonicalization matches AgentGuard:
+sorted object keys, compact JSON separators, unescaped Unicode, then UTF-8.
+The optional live check then verifies the
 reachable API's version, endpoint inventory and health. A missing live service
 returns 42 after the offline check passes; it is never reported as a live pass.
 """
@@ -58,6 +60,15 @@ def _operations(openapi: dict) -> set[str]:
         for method in operations
         if isinstance(method, str) and method.lower() in HTTP_METHODS
     }
+
+
+def _canonical_openapi_bytes(openapi: dict) -> bytes:
+    """Match AgentGuard's canonical identity algorithm: sorted keys, compact
+    separators, unescaped Unicode, and UTF-8 bytes.
+    """
+    return json.dumps(
+        openapi, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
 
 
 def _validate_required_headers(openapi: dict, assertions: dict) -> None:
@@ -184,7 +195,7 @@ def _validate_pinned_diff(openapi: dict, contract: dict) -> None:
     if hashlib.sha256(previous_raw).hexdigest() != previous["raw_sha256"]:
         raise ValueError("previous OpenAPI snapshot raw SHA-256 mismatch")
     old = json.loads(previous_raw.decode("utf-8"))
-    old_canonical = hashlib.sha256(json.dumps(old, sort_keys=True).encode("utf-8")).hexdigest()
+    old_canonical = hashlib.sha256(_canonical_openapi_bytes(old)).hexdigest()
     if old_canonical != previous["canonical_sha256"]:
         raise ValueError("previous OpenAPI snapshot canonical SHA-256 mismatch")
     if len(old.get("paths", {})) != previous["path_count"]:
@@ -207,6 +218,20 @@ def _validate_pinned_diff(openapi: dict, contract: dict) -> None:
         for component in diff.get("assert_unchanged_for_supported", []):
             if before.get(component) != after.get(component):
                 raise ValueError(f"supported operation changed {component}: {operation_key}")
+
+    if diff.get("assert_all_except_info_version"):
+        old_comparable = json.loads(json.dumps(old))
+        new_comparable = json.loads(json.dumps(openapi))
+        old_version = old_comparable.get("info", {}).get("version")
+        new_version = new_comparable.get("info", {}).get("version")
+        if old_version != diff.get("from_version") or new_version != diff.get("to_version"):
+            raise ValueError(
+                "OpenAPI version diff does not match the declared RC2→RC3 versions"
+            )
+        old_comparable["info"].pop("version", None)
+        new_comparable["info"].pop("version", None)
+        if old_comparable != new_comparable:
+            raise ValueError("OpenAPI changed outside info.version")
 
     candidate_operations = {
         item["operation"]
@@ -243,7 +268,7 @@ def validate_snapshot(contract: dict | None = None) -> dict:
     if not isinstance(openapi, dict):
         raise ValueError("pinned OpenAPI snapshot must be a JSON object")
 
-    canonical = json.dumps(openapi, sort_keys=True).encode("utf-8")
+    canonical = _canonical_openapi_bytes(openapi)
     actual_hash = hashlib.sha256(canonical).hexdigest()
     if actual_hash != metadata["sha256_canonical_json"]:
         raise ValueError(

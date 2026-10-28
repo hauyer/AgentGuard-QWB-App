@@ -1,51 +1,49 @@
 {
-  "schema_version": "1.4",
+  "schema_version": "1.5",
   "pinned_agentguard": {
     "repository": "https://github.com/hauyer/AgentGuard",
     "branch": "feature/i-reliability-and-live-validation",
-    "commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
-    "commit_short": "63fe1b5",
-    "commit_subject": "Refresh WARDEN gate implementation snapshot",
-    "api_source_commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
-    "pinned_at": "2026-10-26",
-    "previous_pin": "8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25 (1.1.0rc1; prior runtime pin)",
-    "upstream_version": "1.1.0rc2"
+    "commit": "9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a",
+    "commit_short": "9a8ee1f",
+    "commit_subject": "feat: harden WARDEN integration, evidence contracts, and paired experiment gates",
+    "api_source_commit": "9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a",
+    "pinned_at": "2026-10-28",
+    "previous_pin": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc (1.1.0rc2; prior runtime pin)",
+    "upstream_version": "1.1.0rc3"
   },
   "openapi": {
     "path_count": 86,
-    "sha256_file": "2ce83660a67111a346a2de9772fcaec1938a4a5de713439de34a83e372b9a5e5",
-    "sha256_canonical_json": "430a8115f4dfb8c865060d45345a58bf267f60657b1ba8ab1c0faa2ba3acf41c",
-    "verified_at": "2026-10-26",
-    "snapshot": "integration-data/agentguard-openapi-63fe1b5.json",
-    "source_commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
+    "sha256_file": "fadab4d701d23fabda785413cf0c4536fcffec521ea09cbe6ad73a417c15de1e",
+    "sha256_canonical_json": "52ad0d5dc175e58759196588d1c4ab5b45e82751f882c82ed8540cb963d942f6",
+    "canonicalization": "UTF-8 JSON; recursively sorted object keys; compact separators; Unicode unescaped",
+    "verified_at": "2026-10-28",
+    "snapshot": "integration-data/agentguard-openapi-9a8ee1f.json",
+    "source_commit": "9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a",
     "verification_method": "static_source_only",
     "live_openapi": "NOT_RUN"
   },
   "upstream_ci": {
     "workflow": "AgentGuard CI",
-    "run_id": 40314646080,
-    "run_url": "https://github.com/hauyer/AgentGuard/actions/runs/40314646080",
-    "commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
+    "run_id": 40336215846,
+    "run_url": "https://github.com/hauyer/AgentGuard/actions/runs/40336215846",
+    "commit": "9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a",
     "conclusion": "success",
     "jobs": [
       "test (3.11)",
       "test (3.12)",
       "test (3.13)"
     ],
-    "verified_at": "2026-10-26"
+    "verified_at": "2026-10-28"
   },
   "api_documentation": {
     "qwb_handoff_contract": "docs/integration/I_QWB_HANDOFF.md",
     "request_contract": "src/agentguard/contracts/warden.py",
     "loop_contract": "src/agentguard/contracts/loop_public.py",
     "truth_guard": "src/agentguard/contracts/truth_guard.py",
-    "readiness": "src/agentguard/contracts/system_readiness.py (D-round: layered readiness checks)",
-    "investigation_options": "options endpoint modes[].submittable/blockers (real resource discovery)",
-    "multi_round_loop": "GET /v1/runs/{run_id}/investigation (D3 loop journal) + /timeline",
-    "loop_service": "GET/POST /v1/investigation-loops (I7 persisted registry; stable idempotency key required for POST)",
-    "strategy_evaluations": "GET /v1/research/strategy-evaluations[/{evaluation_id}] (I7 persisted artifacts)",
-    "risk_hypotheses": "GET /v1/runs/{run_id}/findings + /hypotheses (E1 semantics)",
-    "openapi_diff_report": "docs/api/AGENTGUARD_OPENAPI_DIFF_RC2.md"
+    "readiness": "src/agentguard/contracts/system_readiness.py (layered readiness checks)",
+    "openapi_diff_report": "docs/api/AGENTGUARD_OPENAPI_DIFF_RC3.md",
+    "upstream_rc3_diff": "docs/integration/openapi-1.1.0rc3.diff.md",
+    "warden_live_gate": "docs/integration/I5_WARDEN_LIVE_GATE.md"
   },
   "supported_endpoints": [
     "GET /v1/system/health",
@@ -140,8 +138,38 @@
     ]
   },
   "candidate_endpoints": {
-    "description": "OpenAPI additions between the 1.1.0rc1 snapshot (API source 66dae883fb75cf90ef735b94d2f5c9b565ba5ad3) and 1.1.0rc2 (API source 63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc). These operations remain outside the App client and UI until live behavior is verified.",
+    "description": "OpenAPI operations published in RC2 and unchanged in RC3 but not integrated into the App. See each reason; static publication does not establish live behavior, project ownership, retry safety, provenance, or an available real executor.",
     "published_not_exposed": [
+      {
+        "operation": "GET /v1/runs/{run_id}/experiments/paired",
+        "status": "candidate",
+        "verification": "static_source_only",
+        "reason": "Run-scoped persisted paired records are separate from project-scoped Study/Arm resources; no App authorization mapping is implemented."
+      },
+      {
+        "operation": "GET /v1/studies",
+        "status": "candidate",
+        "verification": "static_source_only",
+        "reason": "Upstream list is global and has limit only; App has no project-scoped study ownership mapping or live verification."
+      },
+      {
+        "operation": "GET /v1/studies/{study_id}",
+        "status": "candidate",
+        "verification": "static_source_only",
+        "reason": "Study lookup is not project-scoped upstream; App has no verified ownership mapping."
+      },
+      {
+        "operation": "GET /v1/studies/{study_id}/analyses",
+        "status": "candidate",
+        "verification": "static_source_only",
+        "reason": "Read remains unexposed until project ownership and live behavior are verified."
+      },
+      {
+        "operation": "GET /v1/studies/{study_id}/integrity",
+        "status": "candidate",
+        "verification": "static_source_only",
+        "reason": "Hash integrity is not trusted timestamping, provenance verification, or live validation."
+      },
       {
         "operation": "GET /v1/system/identity",
         "status": "candidate",
@@ -153,6 +181,30 @@
         "status": "candidate",
         "verification": "static_source_only",
         "reason": "New in rc2; documented query-only reconciliation but not live validated or exposed by the App."
+      },
+      {
+        "operation": "POST /v1/runs/{run_id}/experiments/paired",
+        "status": "blocked",
+        "verification": "static_source_only",
+        "reason": "Real execution requires a validated paired_executor; upstream production create_app rejects direct paired_executor injection and WARDEN Live remains BLOCKED."
+      },
+      {
+        "operation": "POST /v1/runs/{run_id}/interventions",
+        "status": "blocked",
+        "verification": "static_source_only",
+        "reason": "Intervention execution is run-scoped, requires approval/policy gates, and has no verified real executor or Study/Arm mapping."
+      },
+      {
+        "operation": "POST /v1/studies",
+        "status": "candidate",
+        "verification": "static_source_only",
+        "reason": "Preregistration schema is published, but the App has no project mapping and POST idempotency; live behavior is NOT_RUN."
+      },
+      {
+        "operation": "POST /v1/studies/{study_id}/analyses",
+        "status": "blocked",
+        "verification": "static_source_only",
+        "reason": "Analysis accepts caller-supplied outcome arrays; refs and hashes are not independent proof of data provenance."
       }
     ],
     "not_published": [
@@ -187,14 +239,14 @@
     "defense_execute": "compatibility entry; executor missing => honest unsupported response"
   },
   "previous_contract": {
-    "runtime_commit": "8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25",
-    "runtime_version": "1.1.0rc1",
-    "api_source_commit": "66dae883fb75cf90ef735b94d2f5c9b565ba5ad3",
-    "snapshot": "integration-data/agentguard-openapi-cd3e9f3.json",
-    "raw_sha256": "d577e6001883ada17d47f195cafe48c5394e46c5f16f587636eb907a1e1aa78e",
-    "canonical_sha256": "e2d6d9bd7cf94441fa508b34af922b8da7cf724778ff62d10b728367a93c3c9f",
-    "path_count": 84,
-    "runtime_commit_subject": "Harden WARDEN reconciliation and loop budgets"
+    "runtime_commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
+    "runtime_version": "1.1.0rc2",
+    "api_source_commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
+    "snapshot": "integration-data/agentguard-openapi-63fe1b5.json",
+    "raw_sha256": "2ce83660a67111a346a2de9772fcaec1938a4a5de713439de34a83e372b9a5e5",
+    "canonical_sha256": "d0a04af3d87c9dca3b30aa7feed89f84447103ed9e8c32c063257c8214a25834",
+    "path_count": 86,
+    "runtime_commit_subject": "Refresh WARDEN gate implementation snapshot"
   },
   "verification": {
     "source_review": "PASS",
@@ -208,14 +260,44 @@
   "capability_status": {
     "published_but_not_app_supported": [
       {
+        "operation": "GET /v1/artifacts/{artifact_id}/content",
+        "status": "candidate",
+        "reason": "No App-managed artifact download and integrity-verification flow has been implemented or live validated."
+      },
+      {
+        "operation": "GET /v1/runs/{run_id}/experiments/paired",
+        "status": "candidate",
+        "reason": "Run-scoped persisted paired records are separate from project-scoped Study/Arm resources; no App authorization mapping is implemented."
+      },
+      {
+        "operation": "GET /v1/studies",
+        "status": "candidate",
+        "reason": "Upstream list is global and has limit only; App has no project-scoped study ownership mapping or live verification."
+      },
+      {
+        "operation": "GET /v1/studies/{study_id}",
+        "status": "candidate",
+        "reason": "Study lookup is not project-scoped upstream; App has no verified ownership mapping."
+      },
+      {
+        "operation": "GET /v1/studies/{study_id}/analyses",
+        "status": "candidate",
+        "reason": "Read remains unexposed until project ownership and live behavior are verified."
+      },
+      {
+        "operation": "GET /v1/studies/{study_id}/integrity",
+        "status": "candidate",
+        "reason": "Hash integrity is not trusted timestamping, provenance verification, or live validation."
+      },
+      {
         "operation": "POST /v1/defense-policies/{request_id}/execute",
         "status": "blocked",
         "reason": "The App has no verified live executor evidence; UI execution remains disabled. An OpenAPI operation alone does not establish a safe, working executor."
       },
       {
-        "operation": "GET /v1/artifacts/{artifact_id}/content",
+        "operation": "POST /v1/probes/predict",
         "status": "candidate",
-        "reason": "No App-managed artifact download and integrity-verification flow has been implemented or live validated."
+        "reason": "No App workflow or live validation for Probe/SAE operations."
       },
       {
         "operation": "POST /v1/probes/train",
@@ -223,9 +305,24 @@
         "reason": "No App workflow or live validation for Probe/SAE operations."
       },
       {
-        "operation": "POST /v1/probes/predict",
+        "operation": "POST /v1/runs/{run_id}/experiments/paired",
+        "status": "blocked",
+        "reason": "Real execution requires a validated paired_executor; upstream production create_app rejects direct paired_executor injection and WARDEN Live remains BLOCKED."
+      },
+      {
+        "operation": "POST /v1/runs/{run_id}/interventions",
+        "status": "blocked",
+        "reason": "Intervention execution is run-scoped, requires approval/policy gates, and has no verified real executor or Study/Arm mapping."
+      },
+      {
+        "operation": "POST /v1/studies",
         "status": "candidate",
-        "reason": "No App workflow or live validation for Probe/SAE operations."
+        "reason": "Preregisration schema is published, but the App has no project mapping and POST idempotency; live behavior is NOT_RUN."
+      },
+      {
+        "operation": "POST /v1/studies/{study_id}/analyses",
+        "status": "blocked",
+        "reason": "Analysis accepts caller-supplied outcome arrays; refs and hashes are not independent proof of data provenance."
       }
     ],
     "blocked": [
@@ -233,11 +330,8 @@
     ]
   },
   "openapi_diff": {
-    "baseline_snapshot": "integration-data/agentguard-openapi-cd3e9f3.json",
-    "added_operations": [
-      "GET /v1/system/identity",
-      "POST /v1/investigation-loops/{loop_id}/reconcile"
-    ],
+    "baseline_snapshot": "integration-data/agentguard-openapi-63fe1b5.json",
+    "added_operations": [],
     "removed_operations": [],
     "assert_unchanged_for_supported": [
       "parameters",
@@ -245,13 +339,53 @@
       "responses",
       "security"
     ],
-    "added_schemas": [
-      "InvestigationLoopReconciliationResponse",
-      "ReconciledWorkflowView",
-      "SystemIdentityResponse"
-    ],
+    "assert_all_except_info_version": true,
+    "from_version": "1.1.0rc2",
+    "to_version": "1.1.0rc3",
+    "added_schemas": [],
     "removed_schemas": [],
-    "baseline_raw_sha256": "d577e6001883ada17d47f195cafe48c5394e46c5f16f587636eb907a1e1aa78e",
-    "baseline_canonical_sha256": "e2d6d9bd7cf94441fa508b34af922b8da7cf724778ff62d10b728367a93c3c9f"
-  }
+    "baseline_raw_sha256": "2ce83660a67111a346a2de9772fcaec1938a4a5de713439de34a83e372b9a5e5",
+    "baseline_canonical_sha256": "d0a04af3d87c9dca3b30aa7feed89f84447103ed9e8c32c063257c8214a25834"
+  },
+  "research_capability_status": {
+    "study_registration_and_lookup": {
+      "status": "static_only",
+      "published_operations": [
+        "POST /v1/studies",
+        "GET /v1/studies",
+        "GET /v1/studies/{study_id}",
+        "GET /v1/studies/{study_id}/integrity",
+        "GET /v1/studies/{study_id}/analyses"
+      ],
+      "reason": "Published in the RC2/RC3 OpenAPI, but no live service verification or App-side project ownership mapping has been completed; POST has no upstream idempotency contract."
+    },
+    "study_analysis": {
+      "status": "blocked",
+      "reason": "The route analyzes caller-supplied paired arrays. Source artifact refs and SHA metadata are not independent proof of provenance, so the App cannot present this as verified live research."
+    },
+    "four_layer_intervention_execution": {
+      "status": "blocked",
+      "published_operations": [
+        "GET /v1/runs/{run_id}/experiments/paired",
+        "POST /v1/runs/{run_id}/experiments/paired",
+        "POST /v1/runs/{run_id}/interventions"
+      ],
+      "reason": "Paired/intervention routes are run-scoped, not Study/Arm linked; a real paired_executor is unavailable and real WARDEN execution is blocked."
+    },
+    "real_warden_execution": "NOT_RUN",
+    "live_openapi_and_identity": "NOT_RUN",
+    "verification_source": "https://github.com/hauyer/AgentGuard/blob/9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a/docs/integration/I5_WARDEN_LIVE_GATE.md"
+  },
+  "historical_contracts": [
+    {
+      "runtime_commit": "8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25",
+      "runtime_version": "1.1.0rc1",
+      "api_source_commit": "66dae883fb75cf90ef735b94d2f5c9b565ba5ad3",
+      "snapshot": "integration-data/agentguard-openapi-cd3e9f3.json",
+      "raw_sha256": "d577e6001883ada17d47f195cafe48c5394e46c5f16f587636eb907a1e1aa78e",
+      "canonical_sha256": "cf6967dc0a0bb1757193e64a92e2612dd095e203b290db006f3c97a5f5fa3ecc",
+      "path_count": 84,
+      "runtime_commit_subject": "Harden WARDEN reconciliation and loop budgets"
+    }
+  ]
 }

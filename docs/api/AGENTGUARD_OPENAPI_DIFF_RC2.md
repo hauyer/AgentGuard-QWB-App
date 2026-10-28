@@ -14,6 +14,8 @@
 | Raw snapshot SHA-256 | `d577e6001883ada17d47f195cafe48c5394e46c5f16f587636eb907a1e1aa78e` | `2ce83660a67111a346a2de9772fcaec1938a4a5de713439de34a83e372b9a5e5` |
 | Canonical JSON SHA-256 | `e2d6d9bd7cf94441fa508b34af922b8da7cf724778ff62d10b728367a93c3c9f` | `430a8115f4dfb8c865060d45345a58bf267f60657b1ba8ab1c0faa2ba3acf41c` |
 
+These canonical digests are the values emitted by the App's historical serializer (`json.dumps(sort_keys=True)` with default separators and ASCII escaping). RC3 standardized the contract checker on AgentGuard's identity algorithm (sorted keys, compact separators, unescaped Unicode, UTF-8). Under that algorithm the same unchanged RC1/RC2 raw snapshots hash to `cf6967dc0a0bb1757193e64a92e2612dd095e203b290db006f3c97a5f5fa3ecc` and `d0a04af3d87c9dca3b30aa7feed89f84447103ed9e8c32c063257c8214a25834`. The raw snapshot bytes were not changed by this canonicalization update.
+
 The candidate runtime commit has a successful [AgentGuard CI run 40314646080](https://github.com/hauyer/AgentGuard/actions/runs/40314646080) with Python 3.11, 3.12, and 3.13 jobs passing. This confirms the upstream commit's CI result; it does not validate a running service or WARDEN execution.
 
 ## Operation and schema diff

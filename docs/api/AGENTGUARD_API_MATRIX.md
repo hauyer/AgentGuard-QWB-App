@@ -1,8 +1,8 @@
 # AgentGuard API Matrix
 
-**Pinned runtime:** `63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc` (`1.1.0rc2`)
-**OpenAPI source:** `63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc`; `86` paths.
-**Verification:** static source comparison only; live HTTP smoke is **NOT_RUN**. See [RC2 OpenAPI diff](AGENTGUARD_OPENAPI_DIFF_RC2.md) and the machine-readable [version contract](../../contracts/agentguard-version.json).
+**Pinned runtime:** `9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a` (`1.1.0rc3`)
+**OpenAPI source:** `9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a`; `86` paths and `98` operations.
+**Verification:** static source comparison only; live HTTP smoke, identity, and readiness are **NOT_RUN**. RC2→RC3 changes only `info.version`; see [RC3 OpenAPI diff](AGENTGUARD_OPENAPI_DIFF_RC3.md), the [historical RC2 diff](AGENTGUARD_OPENAPI_DIFF_RC2.md), and the machine-readable [version contract](../../contracts/agentguard-version.json).
 
 ## App-supported endpoints
 
@@ -47,6 +47,11 @@ The listed operations are the App's current supported contract. A contract match
 ## Unexposed or blocked capabilities
 
 - New in rc2 and not integrated: `GET /v1/system/identity`, `POST /v1/investigation-loops/{loop_id}/reconcile`. Both remain candidate operations until live behavior is verified.
+- Published but not exposed by the App: `POST/GET /v1/studies`, Study detail/integrity/analysis routes, run-scoped `GET/POST /v1/runs/{run_id}/experiments/paired`, and `POST /v1/runs/{run_id}/interventions`.
+- Study registry routes are **STATIC_ONLY**: live service behavior and project ownership are unverified, Study creation has no upstream idempotency header, and the schema does not contain the requested track/Arm matrix. Analysis accepts caller-supplied outcome arrays; source refs and hashes are not independent provenance proof.
+- Run-scoped paired/intervention routes are **BLOCKED** for real study execution. They require an existing run/design/action and do not map to Study/Arm records; the production AgentGuard API refuses a real paired run without a validated executor. WARDEN Live Gate remains **BLOCKED**.
+- RC3 exports paired-experiment and evidence JSON Schemas, but schema additions do not prove that a remote executor, dataset, model, or artifact is available.
+- True WARDEN execution, Probe/model validation, and real study HTTP smoke are **NOT_RUN**. The Experiments page's gate notice is informational and does not represent a Study record.
 - Public defense execute operations remain blocked in the App until an executor, permission contract, and real result are validated.
 - Public artifact content routes are not exposed through an App-controlled download and integrity-verification flow.
 - Public Probe train/predict operations are not exposed through an App Probe/SAE workflow.

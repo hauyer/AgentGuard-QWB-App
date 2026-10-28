@@ -1,11 +1,14 @@
 """Unified AgentGuard API client (BFF connector).
 
-Contract baseline (RC2): AgentGuard commit 63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc
-(feature/i-reliability-and-live-validation, API snapshot source at the same commit,
-1.1.0rc2; 86 OpenAPI paths). The 33 App-supported operations are schema-compatible
-with the retained 1.1.0rc1 snapshot. RC2 identity and query-only Loop reconciliation
-remain static-only candidates and are not exposed by this client. Capability
-discovery guards tracked operations so older pins degrade explicitly.
+Contract baseline (RC3): AgentGuard runtime and API source commit
+9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a (feature/i-reliability-and-live-validation,
+1.1.0rc3; 86 OpenAPI paths). The RC2→RC3 OpenAPI delta changes only `info.version`;
+the 33 App-supported operations retain their existing contracts. Study registry,
+run-scoped paired/intervention, and Probe routes are published but remain outside the
+App client: live behavior, project ownership, data provenance, and real execution are
+not verified. RC2 identity and query-only Loop reconciliation also remain static-only
+candidates and are not exposed by this client. Capability discovery guards tracked
+operations so older pins degrade explicitly.
 
 Safety rules enforced here (mirror the upstream SDK contract):
   * upstream origin is fixed by server config; callers cannot choose arbitrary hosts

@@ -123,6 +123,16 @@ describe("ExperimentsPage", () => {
     expect(screen.getByText(/recorded:run-qwb-0001/)).toBeInTheDocument();
   });
 
+  it("keeps the published but unverified four-layer research capability explicitly gated", async () => {
+    mockFetch(experimentsResponse);
+    renderWithProviders(<ExperimentsPage />);
+    expect(screen.getByText("四层干预研究能力")).toBeInTheDocument();
+    expect(screen.getByText("STATIC_ONLY")).toBeInTheDocument();
+    expect(screen.getByText("NOT_RUN")).toBeInTheDocument();
+    expect(screen.getByText("BLOCKED")).toBeInTheDocument();
+    expect(screen.getByText(/不显示实验矩阵、SRR \/ BER \/ U 指标或因果结论/)).toBeInTheDocument();
+  });
+
   it("hides metric values when the upstream marks metrics unavailable", async () => {
     mockFetch(experimentsResponse);
     renderWithProviders(<ExperimentsPage />);

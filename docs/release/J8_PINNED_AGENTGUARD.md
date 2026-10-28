@@ -121,3 +121,15 @@ RC1 快照保留为 84 paths、raw SHA-256 `d577e6001883ada17d47f195cafe48c5394e
 Docker 首轮构建发现前端 Windows `node_modules` 被复制进 Linux 镜像；新增 `.dockerignore` 后构建上下文降至前端约 2 MB、后端约 0.4 MB，最终镜像构建通过。状态卡片显示 blocker 列表的类型也已改为共享 `LayerStatusSummary`，通过前端类型检查和生产构建。
 
 最终边界：真实 AgentGuard HTTP Smoke 为 **NOT_RUN**，WARDEN Live Gate 仍为 **BLOCKED**。RC2 静态合同、Stub 单测和 Playwright 结果均不代表真实 WARDEN、模型或远端 Loop 执行成功。未推送、未合并、未部署。
+
+## APP 主开发指南与 RC3 静态集成（2026-10-28）
+
+开发指南指定的审计起点已核对为 `feature/b25-b33-real-integration` @ `74627b234a86ef13615e90346e0c8f3a3c86fc7e`；起始工作区干净。基线 QWB-App CI [40336150184](https://github.com/hauyer/AgentGuard-QWB-App/actions/runs/40336150184) 通过。页面、BFF、客户端、项目/RBAC、审计、证据与报告复用审计见 [`docs/research/UI_REUSE_AUDIT.md`](../research/UI_REUSE_AUDIT.md)。
+
+当前固定 AgentGuard runtime 为 `9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a`（1.1.0rc3）；OpenAPI 来源独立记录同一代码提交。此提交 [AgentGuard CI 40336215846](https://github.com/hauyer/AgentGuard/actions/runs/40336215846) 的 Python 3.11/3.12/3.13 工作均成功。rc2→rc3 OpenAPI 差异只有 `info.version`，共 86 paths / 98 operations；应用支持的 33 operations 保持原合同。快照 raw SHA-256 为 `fadab4d701d23fabda785413cf0c4536fcffec521ea09cbe6ad73a417c15de1e`，按 AgentGuard identity 算法计算的 canonical SHA-256 为 `52ad0d5dc175e58759196588d1c4ab5b45e82751f882c82ed8540cb963d942f6`。RC1、RC2 快照均保留，离线 checker 会要求 RC3 除版本字段外与 RC2 完全一致。
+
+本轮也将 canonical hash 算法统一为 AgentGuard identity 算法。历史 J8/RC2 记录中的 `e2d6d9…`（RC1）与 `430a8115…`（RC2）是旧 App 序列化器的 digest；当前算法对相同的原始文件分别得到 `cf6967dc…` 和 `d0a04af3…`。原始 OpenAPI 文件字节和 raw SHA 未变化，差别只来自 canonical 序列化规则。
+
+RC3 OpenAPI 确实发布 `POST/GET /v1/studies`、Study detail/integrity/analysis 和 run-scoped paired/intervention 路由；这些自 RC2 起已存在，未纳入 App 的 33-operation 支持合同。上游 Study preregistration 未提供项目归属或 POST 幂等键；analysis 使用 caller-supplied outcome arrays，其 artifact refs/hashes 不是独立来源证明。paired/intervention 操作依赖 run/design/action，真实 backend 缺少 validated `paired_executor` 时返回 `PAIRED_REPLAY_UNAVAILABLE`，且 AgentGuard production API factory 不接受 direct executor。为避免跨项目泄露和模糊 POST 重复，应用继续将这些能力标为 **STATIC_ONLY/BLOCKED**，没有添加 BFF 写路由或 Study 数据库。ExperimentsPage 展示这一门控，不生成假 Arm/指标。
+
+本轮新增/调整的实际检查结果见 [`docs/research/APP_GATE_5.md`](../research/APP_GATE_5.md)：后端全量测试 281 passed、1 skipped；前端类型检查、Lint、69 项单测、生产构建及 2 项 Playwright 均通过；迁移验证和 Docker Compose 配置检查通过。PostgreSQL 并发专项因没有 `QWB_TEST_POSTGRES_URL` 跳过；Docker 镜像构建因本机 Docker Desktop Linux engine pipe 不可用而未能启动。`git diff --check` 和离线合同验证通过。本机没有真实服务凭证，Live HTTP Smoke、identity/readiness 和 AgentGuard→WARDEN 全栈执行为 **NOT_RUN**；WARDEN Live Gate 为 **BLOCKED**。本次只改 App，不推送、合并或部署。
