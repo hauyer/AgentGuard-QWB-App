@@ -108,16 +108,33 @@ def _validate_422_response(openapi: dict, operation_key: str, *, custom: bool) -
             raise ValueError(f"{operation_key} validation error schema differs from the pinned contract")
         return
 
-    alternatives = schema.get("oneOf", [])
-    has_validation_errors = False
-    has_typed_error = False
-    for alternative in alternatives:
-        detail = alternative.get("properties", {}).get("detail", {})
-        if detail.get("type") == "array":
-            item = detail.get("items", {})
-            has_validation_errors = {"type", "loc", "msg"} <= set(item.get("required", []))
-        elif detail.get("type") == "object":
-            has_typed_error = "error" in detail.get("required", [])
+    detail = schema.get("properties", {}).get("detail", {})
+    envelope_options = schema.get("oneOf", [])
+    alternatives = detail.get("oneOf", [])
+    if envelope_options:
+        alternatives = []
+        for envelope in envelope_options:
+            nested_detail = envelope.get("properties", {}).get("detail", {})
+            alternatives.extend(nested_detail.get("oneOf", []) or [nested_detail])
+    has_validation_errors = any(
+        item.get("type") == "array"
+        and item.get("items", {}).get("type") == "object"
+        for item in alternatives
+    )
+    typed_error = next((
+        item.get("properties", {}).get("detail", item)
+        for item in alternatives
+        if item.get("type") == "object"
+        and item.get("properties", {}).get("detail", item).get("type") == "object"
+        and "error" in item.get("properties", {}).get("detail", item).get("properties", {})
+    ), {})
+    typed_properties = typed_error.get("properties", {})
+    has_typed_error = (
+        "error" in typed_error.get("required", ["error"])
+        and
+        typed_properties.get("error", {}).get("type") == "string"
+        and typed_properties.get("message", {}).get("type") == "string"
+    )
     if not has_validation_errors or not has_typed_error:
         raise ValueError(f"{operation_key} must preserve typed API errors and sanitized validation errors")
 
@@ -173,8 +190,128 @@ def _validate_live_shapes(openapi: dict, contract: dict) -> None:
     validation_schema = assertions.get("validation_error_schema")
     if validation_schema:
         custom_operations = set(assertions.get("custom_validation_error_operations", []))
-        for operation_key in contract["supported_endpoints"]:
+        validation_operations = assertions.get(
+            "validation_error_operations", contract["supported_endpoints"]
+        )
+        for operation_key in validation_operations:
             _validate_422_response(openapi, operation_key, custom=operation_key in custom_operations)
+
+
+def _validate_research_contract(openapi: dict, contract: dict) -> None:
+    """Validate the RC5 research schemas and the unsafe-analysis boundary."""
+    expected = contract.get("research_contract_assertions")
+    if not isinstance(expected, dict):
+        raise ValueError("RC5 research contract assertions are missing")
+    paths = openapi.get("paths", {})
+    schemas = openapi.get("components", {}).get("schemas", {})
+
+    def operation(key: str) -> dict:
+        method, path = key.split(" ", 1)
+        value = paths.get(path, {}).get(method.lower())
+        if not isinstance(value, dict):
+            raise ValueError(f"research operation is missing: {key}")
+        return value
+
+    def response_schema(key: str, status: str, schema_name: str) -> None:
+        response = operation(key).get("responses", {}).get(status, {})
+        schema = response.get("content", {}).get("application/json", {}).get("schema", {})
+        if schema.get("$ref") != f"#/components/schemas/{schema_name}":
+            raise ValueError(f"{key} {status} response no longer references {schema_name}")
+
+    cap = expected["capabilities"]
+    response_schema(cap["operation"], "200", cap["response_schema"])
+    cap_schema = schemas.get(cap["response_schema"], {})
+    cap_item_ref = cap_schema.get("properties", {}).get("capabilities", {}).get("items", {}).get("$ref")
+    if cap_item_ref != "#/components/schemas/ResearchCapabilityItem":
+        raise ValueError("research capability report item schema changed")
+    cap_item = schemas.get("ResearchCapabilityItem", {}).get("properties", {}).get("capability", {})
+    cap_names = set(cap_item.get("enum", []))
+    if cap_names != set(cap["capability_names"]):
+        raise ValueError("research capability names differ from the pinned contract")
+
+    study = expected["study_registration"]
+    post_study = operation(study["operation"])
+    request_schema = post_study.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema", {})
+    if request_schema.get("$ref") != f"#/components/schemas/{study['request_schema']}":
+        raise ValueError("Study registration request schema changed")
+    response_schema(study["operation"], "201", study["response_schema"])
+    study_headers = {
+        item.get("name"): item
+        for item in post_study.get("parameters", [])
+        if isinstance(item, dict) and item.get("in") == "header"
+    }
+    key_header = study_headers.get(study["idempotency_header"])
+    if not isinstance(key_header, dict) or key_header.get("required") is not study["idempotency_header_required"]:
+        raise ValueError("Study registration Idempotency-Key requiredness changed")
+    key_schema = key_header.get("schema", {})
+    string_schema = key_schema
+    if "anyOf" in key_schema:
+        string_schema = next((item for item in key_schema["anyOf"] if item.get("type") == "string"), {})
+    if string_schema.get("pattern") != study["idempotency_pattern"] or string_schema.get("maxLength") != study["idempotency_max_length"]:
+        raise ValueError("Study registration Idempotency-Key format changed")
+    if study["conflict_status"] not in post_study.get("responses", {}):
+        raise ValueError("Study registration idempotency conflict response is missing")
+    registration_properties = schemas.get(study["request_schema"], {}).get("properties", {})
+    if not {"track", "arms", "dataset_version", "warden_contract_id", "approval_requirements"} <= set(registration_properties):
+        raise ValueError("RC5 Study preregistration metadata fields are missing")
+
+    study_list = expected["study_list"]
+    list_parameters = {
+        item.get("name"): item
+        for item in operation(study_list["operation"]).get("parameters", [])
+        if isinstance(item, dict) and item.get("in") == "query"
+    }
+    if not set(study_list["parameters"]) <= set(list_parameters):
+        raise ValueError("Study list filters or pagination parameters changed")
+    for name in ("sort_by", "sort_order"):
+        if set(list_parameters[name].get("schema", {}).get("enum", [])) != set(study_list[name]):
+            raise ValueError(f"Study list {name} allow-list changed")
+
+    detail = expected["study_detail"]
+    response_schema(detail["operation"], "200", detail["response_schema"])
+    analysis_list = expected["analysis_list"]
+    analysis_parameters = {
+        item.get("name"): item
+        for item in operation(analysis_list["operation"]).get("parameters", [])
+        if isinstance(item, dict) and item.get("in") == "query"
+    }
+    if not set(analysis_list["parameters"]) <= set(analysis_parameters):
+        raise ValueError("Study analysis list pagination/filter parameters changed")
+    if set(analysis_parameters["evidence_mode"].get("schema", {}).get("anyOf", [{}])[0].get("enum", [])) != set(analysis_list["evidence_mode"]):
+        raise ValueError("Study analysis evidence-mode values changed")
+    if set(analysis_parameters["sort_order"].get("schema", {}).get("enum", [])) != set(analysis_list["sort_order"]):
+        raise ValueError("Study analysis sort-order values changed")
+
+    analysis_write = expected["analysis_write"]
+    analysis_post = operation(analysis_write["operation"])
+    analysis_request = analysis_post.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema", {})
+    if analysis_request.get("$ref") != f"#/components/schemas/{analysis_write['request_schema']}":
+        raise ValueError("Study analysis request schema changed")
+    response_schema(analysis_write["operation"], "201", analysis_write["response_schema"])
+    analysis_header = next((
+        item for item in analysis_post.get("parameters", [])
+        if item.get("in") == "header" and item.get("name") == analysis_write["idempotency_header"]
+    ), None)
+    if not isinstance(analysis_header, dict) or analysis_header.get("required") is not analysis_write.get(
+        "idempotency_header_required", False
+    ):
+        raise ValueError("Study analysis Idempotency-Key contract changed")
+    analysis_key_schema = analysis_header.get("schema", {})
+    analysis_key_string = analysis_key_schema
+    if "anyOf" in analysis_key_schema:
+        analysis_key_string = next(
+            (item for item in analysis_key_schema["anyOf"] if item.get("type") == "string"), {}
+        )
+    if (
+        analysis_key_string.get("pattern") != study["idempotency_pattern"]
+        or analysis_key_string.get("maxLength") != study["idempotency_max_length"]
+    ):
+        raise ValueError("Study analysis Idempotency-Key format changed")
+    measured_response = analysis_post.get("responses", {}).get(analysis_write["measured_error_status"], {})
+    if "Measured outcomes are rejected" not in measured_response.get("description", ""):
+        raise ValueError("Measured analysis must remain blocked until source artifacts are verified")
+    if analysis_write["operation"] in contract.get("supported_endpoints", []):
+        raise ValueError("unverified caller-supplied analysis writes must not be App-supported")
 
 
 def _validate_pinned_diff(openapi: dict, contract: dict) -> None:
@@ -203,6 +340,10 @@ def _validate_pinned_diff(openapi: dict, contract: dict) -> None:
 
     old_operations = _operations(old)
     new_operations = _operations(openapi)
+    if len(old_operations) != previous.get("operation_count", len(old_operations)):
+        raise ValueError("previous OpenAPI snapshot operation count mismatch")
+    if len(new_operations) != contract["openapi"].get("operation_count", len(new_operations)):
+        raise ValueError("pinned OpenAPI operation count mismatch")
     actual_added = sorted(new_operations - old_operations)
     actual_removed = sorted(old_operations - new_operations)
     if actual_added != sorted(diff.get("added_operations", [])):
@@ -210,14 +351,44 @@ def _validate_pinned_diff(openapi: dict, contract: dict) -> None:
     if actual_removed != sorted(diff.get("removed_operations", [])):
         raise ValueError(f"OpenAPI removed-operation diff mismatch: {actual_removed}")
 
+    old_schemas = old.get("components", {}).get("schemas", {})
+    new_schemas = openapi.get("components", {}).get("schemas", {})
+    actual_modified_schemas = sorted(
+        name for name in old_schemas.keys() & new_schemas.keys()
+        if old_schemas[name] != new_schemas[name]
+    )
+    if actual_modified_schemas != sorted(diff.get("modified_schemas", [])):
+        raise ValueError(f"OpenAPI modified-schema diff mismatch: {actual_modified_schemas}")
+
     supported = set(contract["supported_endpoints"])
-    for operation_key in sorted(supported & old_operations & new_operations):
+    legacy_supported = set(contract.get("legacy_supported_endpoints", supported))
+    for operation_key in sorted(legacy_supported & old_operations & new_operations):
         method, path = operation_key.split(" ", 1)
         before = old["paths"][path][method.lower()]
         after = openapi["paths"][path][method.lower()]
+        if diff.get("assert_full_operation_unchanged_for_legacy_supported") and before != after:
+            raise ValueError(f"legacy supported operation changed: {operation_key}")
         for component in diff.get("assert_unchanged_for_supported", []):
             if before.get(component) != after.get(component):
                 raise ValueError(f"supported operation changed {component}: {operation_key}")
+
+    actual_modified = sorted(
+        key for key in old_operations & new_operations
+        if old["paths"][key.split(" ", 1)[1]][key.split(" ", 1)[0].lower()]
+        != openapi["paths"][key.split(" ", 1)[1]][key.split(" ", 1)[0].lower()]
+    )
+    if actual_modified != sorted(diff.get("modified_operations", [])):
+        raise ValueError(f"OpenAPI modified-operation diff mismatch: {actual_modified}")
+
+    if diff.get("assert_info_only_version"):
+        old_info = dict(old.get("info", {}))
+        new_info = dict(openapi.get("info", {}))
+        old_version = old_info.pop("version", None)
+        new_version = new_info.pop("version", None)
+        if old_version != diff.get("from_version") or new_version != diff.get("to_version"):
+            raise ValueError("OpenAPI version diff does not match the declared from/to versions")
+        if old_info != new_info:
+            raise ValueError("OpenAPI info changed outside info.version")
 
     if diff.get("assert_all_except_info_version"):
         old_comparable = json.loads(json.dumps(old))
@@ -226,7 +397,7 @@ def _validate_pinned_diff(openapi: dict, contract: dict) -> None:
         new_version = new_comparable.get("info", {}).get("version")
         if old_version != diff.get("from_version") or new_version != diff.get("to_version"):
             raise ValueError(
-                "OpenAPI version diff does not match the declared RC2→RC3 versions"
+                "OpenAPI version diff does not match the declared from/to versions"
             )
         old_comparable["info"].pop("version", None)
         new_comparable["info"].pop("version", None)
@@ -288,6 +459,11 @@ def validate_snapshot(contract: dict | None = None) -> dict:
             f"pinned OpenAPI path count mismatch: expected {metadata['path_count']}, "
             f"got {len(paths) if isinstance(paths, dict) else 'invalid'}"
         )
+    operation_count = len(_operations(openapi))
+    if operation_count != metadata.get("operation_count", operation_count):
+        raise ValueError(
+            f"pinned OpenAPI operation count mismatch: expected {metadata['operation_count']}, got {operation_count}"
+        )
     version = openapi.get("info", {}).get("version") if isinstance(openapi.get("info"), dict) else None
     if version != pinned["upstream_version"]:
         raise ValueError(
@@ -298,6 +474,8 @@ def validate_snapshot(contract: dict | None = None) -> dict:
     missing = set(contract["supported_endpoints"]) - operations
     if missing:
         raise ValueError("pinned endpoints missing from snapshot: " + ", ".join(sorted(missing)))
+
+    _validate_research_contract(openapi, contract)
 
     schemas = openapi.get("components", {}).get("schemas", {})
     assertions = contract.get("contract_assertions", {})

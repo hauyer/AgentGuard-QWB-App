@@ -1,8 +1,8 @@
 # AgentGuard API Matrix
 
-**Pinned runtime:** `9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a` (`1.1.0rc3`)
-**OpenAPI source:** `9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a`; `86` paths and `98` operations.
-**Verification:** static source comparison only; live HTTP smoke, identity, and readiness are **NOT_RUN**. RC2→RC3 changes only `info.version`; see [RC3 OpenAPI diff](AGENTGUARD_OPENAPI_DIFF_RC3.md), the [historical RC2 diff](AGENTGUARD_OPENAPI_DIFF_RC2.md), and the machine-readable [version contract](../../contracts/agentguard-version.json).
+**Pinned runtime:** `d85aa97e1566e2c50816f2ade3129235266ec704` (`1.1.0rc5`)
+**OpenAPI source:** `d85aa97e1566e2c50816f2ade3129235266ec704`; `87` paths and `99` operations. Latest branch head `c67c7f1f186aeec6d95d6a6c1c0a48bb1a84ea38` is a documentation-only commit after this code snapshot.
+**Verification:** RC4→RC5 static source comparison and deterministic App tests; live HTTP smoke, identity, and readiness are **NOT_RUN**. See [RC5 OpenAPI diff](AGENTGUARD_OPENAPI_DIFF_RC5.md), [RC3](AGENTGUARD_OPENAPI_DIFF_RC3.md), [RC2](AGENTGUARD_OPENAPI_DIFF_RC2.md), and the machine-readable [version contract](../../contracts/agentguard-version.json).
 
 ## App-supported endpoints
 
@@ -43,15 +43,21 @@ The listed operations are the App's current supported contract. A contract match
 | `/v1/research/strategy-evaluations/{evaluation_id}` | `GET` | Contracted in BFF |
 | `/v1/investigations/{request_id}/risk-analysis` | `GET` | Contracted in BFF |
 | `/v1/system/audit-events` | `GET` | Contracted in BFF |
+| `/v1/research/capabilities` | `GET` | Contracted; BFF returns upstream capability status and source mode |
+| `/v1/studies` | `GET` | Contracted; BFF presents only local project mappings |
+| `/v1/studies` | `POST` | Contracted; BFF persists project intent and requires idempotency |
+| `/v1/studies/{study_id}` | `GET` | Contracted; BFF checks local project mapping first |
+| `/v1/studies/{study_id}/integrity` | `GET` | Contracted; BFF checks local project mapping first |
+| `/v1/studies/{study_id}/analyses` | `GET` | Contracted; BFF checks local project mapping first |
 
 ## Unexposed or blocked capabilities
 
 - New in rc2 and not integrated: `GET /v1/system/identity`, `POST /v1/investigation-loops/{loop_id}/reconcile`. Both remain candidate operations until live behavior is verified.
-- Published but not exposed by the App: `POST/GET /v1/studies`, Study detail/integrity/analysis routes, run-scoped `GET/POST /v1/runs/{run_id}/experiments/paired`, and `POST /v1/runs/{run_id}/interventions`.
-- Study registry routes are **STATIC_ONLY**: live service behavior and project ownership are unverified, Study creation has no upstream idempotency header, and the schema does not contain the requested track/Arm matrix. Analysis accepts caller-supplied outcome arrays; source refs and hashes are not independent provenance proof.
+- `POST /v1/studies/{study_id}/analyses` is not exposed by the App. It accepts caller-supplied outcomes; source refs and hashes do not independently verify provenance. RC5 rejects `measured` results until WARDEN artifact contents are verified.
+- The Study registry is exposed through project-scoped BFF routes backed by a local mapping and durable submission intent. RC5's optional upstream `Idempotency-Key` is used with an App-required key. Live service behavior remains **NOT_RUN**.
 - Run-scoped paired/intervention routes are **BLOCKED** for real study execution. They require an existing run/design/action and do not map to Study/Arm records; the production AgentGuard API refuses a real paired run without a validated executor. WARDEN Live Gate remains **BLOCKED**.
-- RC3 exports paired-experiment and evidence JSON Schemas, but schema additions do not prove that a remote executor, dataset, model, or artifact is available.
-- True WARDEN execution, Probe/model validation, and real study HTTP smoke are **NOT_RUN**. The Experiments page's gate notice is informational and does not represent a Study record.
+- RC5 publishes protocol provenance and capture metadata, but schema additions do not prove that a remote executor, dataset, model, or artifact is available.
+- True WARDEN execution, Probe/model validation, and real study HTTP smoke are **NOT_RUN**. The Research Workbench reports capability responses and registered metadata; it does not represent a Study registration as a run.
 - Public defense execute operations remain blocked in the App until an executor, permission contract, and real result are validated.
 - Public artifact content routes are not exposed through an App-controlled download and integrity-verification flow.
 - Public Probe train/predict operations are not exposed through an App Probe/SAE workflow.
@@ -63,5 +69,5 @@ The listed operations are the App's current supported contract. A contract match
 - General API authentication uses `X-AgentGuard-Token`; operator routes use `X-AgentGuard-Operator-Token`.
 - Error responses use the declared upstream HTTP status and typed error code. The BFF sanitizes upstream messages before returning them to browser clients.
 - Paginated investigation, report, loop, and strategy-evaluation lists preserve upstream `limit`/`offset` semantics. Loop listing follows `next_offset`; strategy-evaluation listing is consumed with bounded paging.
-- Investigation and Loop POST requests are never automatically retried by the BFF. Ambiguous results use persisted request identity and read-only reconciliation.
+- Investigation, Loop and Study POST requests are never automatically retried by the HTTP client. Loop ambiguity uses its persisted reconciliation flow; Study ambiguity is recoverable only by an explicit same-body/same-key request under the RC5 upstream idempotency contract.
 - Evidence levels remain source-provided. Unknown or missing levels are displayed as unknown; observational evidence is not promoted to causal confirmation.

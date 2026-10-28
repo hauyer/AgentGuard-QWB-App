@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useMatches } from "react-router-dom";
 
 import { useSystemStatus } from "../../hooks/use-system-status";
 import { cn } from "../../utils/cn";
@@ -33,6 +33,7 @@ const NAV_GROUPS = [
       { to: "/projects", label: "项目管理", icon: FolderKanban },
       { to: "/investigations", label: "安全调查", icon: Target },
       { to: "/investigation-journal", label: "多轮工作台", icon: BookOpenText },
+      { to: "/research", label: "研究工作台", icon: FlaskConical },
       { to: "/demo", label: "演示导览", icon: PlayCircle },
     ],
   },
@@ -60,10 +61,6 @@ const NAV_GROUPS = [
     items: [{ to: "/settings", label: "系统设置", icon: Settings }],
   },
 ];
-
-const PAGE_TITLES: Record<string, string> = Object.fromEntries(
-  NAV_GROUPS.flatMap((group) => group.items.map((item) => [item.to, item.label])),
-);
 
 function dataModeLabel(mode: string): string {
   switch (mode) {
@@ -142,11 +139,15 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AppLayout() {
   const { data } = useSystemStatus();
-  const location = useLocation();
+  const matches = useMatches();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const agentguardReachable = data?.agentguard.reachable;
   const syntheticBackend = data?.agentguard.capabilities?.backend_mode?.toLowerCase() === "synthetic";
-  const pageTitle = PAGE_TITLES[location.pathname] ?? "调查详情";
+  const pageTitle = [...matches].reverse().find((match) => {
+    const title = (match.handle as { title?: unknown } | undefined)?.title;
+    return typeof title === "string";
+  });
+  const displayedPageTitle = (pageTitle?.handle as { title: string } | undefined)?.title ?? "AgentGuard QWB";
   const displayedDataMode = syntheticBackend ? "synthetic" : data?.data_mode;
   const connectionLabel = connectionStatusLabel(syntheticBackend, agentguardReachable);
 
@@ -191,7 +192,7 @@ export function AppLayout() {
               <Menu className="h-4 w-4" />
             </button>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-slate-800">{pageTitle}</p>
+              <p className="truncate text-sm font-medium text-slate-800">{displayedPageTitle}</p>
               <p className="hidden text-[10px] text-slate-400 sm:block">AgentGuard · QWB 安全调查工作台</p>
             </div>
             <Badge variant={displayedDataMode === "live" ? "ok" : "neutral"}>

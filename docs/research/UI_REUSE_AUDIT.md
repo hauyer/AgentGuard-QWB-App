@@ -1,5 +1,7 @@
 # UI / BFF Reuse Audit
 
+> The original inventory below describes the RC3 planning point. The current RC5 implementation and revised reuse decisions are recorded in the addendum at the end.
+
 Date: 2026-10-28
 Repository: `hauyer/AgentGuard-QWB-App`
 Starting point: `feature/b25-b33-real-integration` @ `74627b234a86ef13615e90346e0c8f3a3c86fc7e`
@@ -45,3 +47,12 @@ Consequences for this App change:
 ## Rollback
 
 Restore `contracts/agentguard-version.json` to its prior RC2 pin (`63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc`) and select its retained `integration-data/agentguard-openapi-63fe1b5.json` snapshot. Keep the RC3 snapshot and diff report in history for audit. No database migration or runtime state transition is planned for this static-only upgrade.
+
+## RC5 implementation addendum — 2026-10-28
+
+- Contract reuse: the single AgentGuard client remains the only upstream HTTP path. It now pins RC5, exposes the capability/Study client methods, validates RC5 `Idempotency-Key`, and still never retries POST automatically.
+- BFF reuse: existing `require_role_csrf`, `require_project_access`, SQLAlchemy/Alembic, app audit service, and error sanitization are used. Migration 0009 stores only the App's project association and submission intent/response snapshot; AgentGuard remains authoritative for Study content.
+- Study privacy: global upstream list is not proxied. The App lists its own project mapping; detail, integrity and analyses first require that mapping. The mapping uses a globally unique upstream study ID to prevent association with multiple projects.
+- UI reuse: the existing Router, AppLayout, `PageHeader`, `Card`, `Badge`, error/empty state, TanStack Query and API service are extended. The new Research Workbench binds queries and mutations to a selected project and visibly distinguishes recorded project rows, synthetic upstream mode, live capability response and unavailable data.
+- Reporting/execution boundary: existing report DTO/export remain unchanged. No analysis write, intervention execution, Probe/SAE workflow or artifact content downloader is added. RC5 `measured` analysis and WARDEN execution remain blocked pending verified source artifacts and real execution evidence.
+- Verification boundaries: deterministic Stub tests verify flow behavior, not live AgentGuard. Real HTTP Smoke and WARDEN execution remain **NOT_RUN** / **BLOCKED**.

@@ -1,39 +1,65 @@
 {
-  "schema_version": "1.5",
+  "schema_version": "1.6",
   "pinned_agentguard": {
     "repository": "https://github.com/hauyer/AgentGuard",
     "branch": "feature/i-reliability-and-live-validation",
-    "commit": "9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a",
-    "commit_short": "9a8ee1f",
-    "commit_subject": "feat: harden WARDEN integration, evidence contracts, and paired experiment gates",
-    "api_source_commit": "9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a",
+    "commit": "d85aa97e1566e2c50816f2ade3129235266ec704",
+    "commit_short": "d85aa97",
+    "commit_subject": "feat: freeze research API and audit WARDEN live gate",
+    "api_source_commit": "d85aa97e1566e2c50816f2ade3129235266ec704",
     "pinned_at": "2026-10-28",
-    "previous_pin": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc (1.1.0rc2; prior runtime pin)",
-    "upstream_version": "1.1.0rc3"
+    "previous_pin": "9d1c1dc9331f4ce168aab29b860c94b9d65a8321 (1.1.0rc4; prior runtime and API source)",
+    "upstream_version": "1.1.0rc5",
+    "upstream_branch_head": "c67c7f1f186aeec6d95d6a6c1c0a48bb1a84ea38",
+    "upstream_branch_head_subject": "docs: record rc5 contract and WARDEN live gate",
+    "upstream_branch_head_delta": "One documentation-only commit after the RC5 API implementation snapshot; verified against GitHub compare."
   },
   "openapi": {
-    "path_count": 86,
-    "sha256_file": "fadab4d701d23fabda785413cf0c4536fcffec521ea09cbe6ad73a417c15de1e",
-    "sha256_canonical_json": "52ad0d5dc175e58759196588d1c4ab5b45e82751f882c82ed8540cb963d942f6",
+    "path_count": 87,
+    "operation_count": 99,
+    "sha256_file": "605a9cd95f0edeedd4d7235fe46a4a6d8c99ffeb4aab00e2e7f51b2addc2a6b7",
+    "sha256_canonical_json": "b7722098b9adac87386a62325b19240e5c7024f704d7024a38ad3a2fb6ca8acd",
     "canonicalization": "UTF-8 JSON; recursively sorted object keys; compact separators; Unicode unescaped",
     "verified_at": "2026-10-28",
-    "snapshot": "integration-data/agentguard-openapi-9a8ee1f.json",
-    "source_commit": "9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a",
-    "verification_method": "static_source_only",
-    "live_openapi": "NOT_RUN"
+    "snapshot": "integration-data/agentguard-openapi-d85aa97.json",
+    "source_commit": "d85aa97e1566e2c50816f2ade3129235266ec704",
+    "verification_method": "static_source_and_fixture_tests",
+    "live_openapi": "PASS_LOCAL_ONLY",
+    "live_observation": {
+      "observed_at": "2026-10-28T15:58:33.276356Z",
+      "base_url": "http://127.0.0.1:8000",
+      "service_version": "1.1.0rc5",
+      "build_commit": "c67c7f1f186aeec6d95d6a6c1c0a48bb1a84ea38",
+      "health": "ok",
+      "path_count": 87,
+      "operation_count": 99,
+      "parsed_openapi_equal_to_snapshot": true,
+      "raw_sha256": "3d70ee39de6f8d6329d6d3d20335d0a47fde32d0c9185f5b5c2345cfe783c1a9",
+      "canonical_sha256": "b7722098b9adac87386a62325b19240e5c7024f704d7024a38ad3a2fb6ca8acd",
+      "live_contract_checker": "PASS_ALL_39_APP_PINNED_OPERATIONS",
+      "data_mode": "synthetic",
+      "warden_blocker": "WARDEN_URL_NOT_CONFIGURED",
+      "bff_health": "HTTP_200",
+      "bff_research_capabilities": "HTTP_200",
+      "vite_proxy_research_capabilities": "HTTP_200",
+      "study_write": "NOT_RUN_NO_DATABASE_URL",
+      "note": "Loopback-only local AgentGuard and QWB development servers; API/operator/approval tokens and WARDEN URL empty. This validates HTTP compatibility, not WARDEN execution or measured analysis."
+    }
   },
   "upstream_ci": {
     "workflow": "AgentGuard CI",
-    "run_id": 40336215846,
-    "run_url": "https://github.com/hauyer/AgentGuard/actions/runs/40336215846",
-    "commit": "9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a",
+    "run_id": 40704083443,
+    "run_url": "https://github.com/hauyer/AgentGuard/actions/runs/40704083443",
+    "commit": "c67c7f1f186aeec6d95d6a6c1c0a48bb1a84ea38",
+    "api_source_commit": "d85aa97e1566e2c50816f2ade3129235266ec704",
     "conclusion": "success",
     "jobs": [
       "test (3.11)",
       "test (3.12)",
       "test (3.13)"
     ],
-    "verified_at": "2026-10-28"
+    "verified_at": "2026-10-28",
+    "note": "The passing run is on the latest branch head, one documentation-only commit after the pinned RC5 API implementation."
   },
   "api_documentation": {
     "qwb_handoff_contract": "docs/integration/I_QWB_HANDOFF.md",
@@ -41,9 +67,11 @@
     "loop_contract": "src/agentguard/contracts/loop_public.py",
     "truth_guard": "src/agentguard/contracts/truth_guard.py",
     "readiness": "src/agentguard/contracts/system_readiness.py (layered readiness checks)",
-    "openapi_diff_report": "docs/api/AGENTGUARD_OPENAPI_DIFF_RC3.md",
-    "upstream_rc3_diff": "docs/integration/openapi-1.1.0rc3.diff.md",
-    "warden_live_gate": "docs/integration/I5_WARDEN_LIVE_GATE.md"
+    "openapi_diff_report": "docs/api/AGENTGUARD_OPENAPI_DIFF_RC5.md",
+    "upstream_rc4_diff": "docs/integration/openapi-1.1.0rc4.diff.md",
+    "upstream_rc5_diff": "docs/integration/openapi-1.1.0rc5.diff.md",
+    "warden_research_gate": "docs/integration/I5_WARDEN_RESEARCH_GATE_2026-10-28.md",
+    "warden_research_contract": "docs/integration/WARDEN_RESEARCH_CONTRACT.md"
   },
   "supported_endpoints": [
     "GET /v1/system/health",
@@ -78,7 +106,13 @@
     "GET /v1/research/strategy-evaluations",
     "GET /v1/research/strategy-evaluations/{evaluation_id}",
     "GET /v1/investigations/{request_id}/risk-analysis",
-    "GET /v1/system/audit-events"
+    "GET /v1/system/audit-events",
+    "GET /v1/research/capabilities",
+    "GET /v1/studies",
+    "POST /v1/studies",
+    "GET /v1/studies/{study_id}",
+    "GET /v1/studies/{study_id}/integrity",
+    "GET /v1/studies/{study_id}/analyses"
   ],
   "unsupported_capabilities": {},
   "contract_assertions": {
@@ -117,6 +151,14 @@
       "GET /v1/research/strategy-evaluations": [
         "limit",
         "offset"
+      ],
+      "GET /v1/studies": [
+        "limit",
+        "offset"
+      ],
+      "GET /v1/studies/{study_id}/analyses": [
+        "limit",
+        "offset"
       ]
     },
     "required_headers": {
@@ -134,41 +176,58 @@
     },
     "validation_error_schema": "HTTPValidationError",
     "custom_validation_error_operations": [
-      "POST /v1/investigation-loops"
+      "POST /v1/investigation-loops",
+      "POST /v1/studies"
+    ],
+    "validation_error_operations": [
+      "GET /v1/system/health",
+      "GET /v1/system/readiness",
+      "GET /v1/system/capabilities",
+      "GET /v1/kernel/status",
+      "GET /v1/investigations/options",
+      "GET /v1/scenarios",
+      "POST /v1/investigations",
+      "GET /v1/investigations",
+      "GET /v1/investigations/{request_id}",
+      "GET /v1/investigations/{request_id}/timeline",
+      "GET /v1/investigations/{request_id}/interaction-graph",
+      "GET /v1/runs/{run_id}/findings",
+      "GET /v1/runs/{run_id}/hypotheses",
+      "GET /v1/runs/{run_id}/investigation",
+      "GET /v1/evidence/investigations/{request_id}",
+      "GET /v1/defense-policies/{request_id}",
+      "POST /v1/defense-policies/{request_id}/preview",
+      "GET /v1/reports",
+      "GET /v1/reports/{run_id}",
+      "GET /v1/experiences",
+      "GET /v1/experiments",
+      "GET /v1/experiments/{experiment_id}",
+      "POST /v1/experiments/compare",
+      "POST /v1/investigation-loops",
+      "GET /v1/investigation-loops",
+      "GET /v1/investigation-loops/{loop_id}",
+      "GET /v1/investigation-loops/{loop_id}/decisions",
+      "GET /v1/investigation-loops/{loop_id}/evidence-changes",
+      "GET /v1/investigation-loops/{loop_id}/budget",
+      "GET /v1/research/strategy-evaluations",
+      "GET /v1/research/strategy-evaluations/{evaluation_id}",
+      "GET /v1/investigations/{request_id}/risk-analysis",
+      "GET /v1/system/audit-events",
+      "POST /v1/studies",
+      "GET /v1/studies",
+      "GET /v1/studies/{study_id}",
+      "GET /v1/studies/{study_id}/integrity",
+      "GET /v1/studies/{study_id}/analyses"
     ]
   },
   "candidate_endpoints": {
-    "description": "OpenAPI operations published in RC2 and unchanged in RC3 but not integrated into the App. See each reason; static publication does not establish live behavior, project ownership, retry safety, provenance, or an available real executor.",
+    "description": "RC5 operations not integrated into the App. Static publication does not establish live behavior, project ownership, provenance, or a real executor.",
     "published_not_exposed": [
       {
         "operation": "GET /v1/runs/{run_id}/experiments/paired",
         "status": "candidate",
         "verification": "static_source_only",
         "reason": "Run-scoped persisted paired records are separate from project-scoped Study/Arm resources; no App authorization mapping is implemented."
-      },
-      {
-        "operation": "GET /v1/studies",
-        "status": "candidate",
-        "verification": "static_source_only",
-        "reason": "Upstream list is global and has limit only; App has no project-scoped study ownership mapping or live verification."
-      },
-      {
-        "operation": "GET /v1/studies/{study_id}",
-        "status": "candidate",
-        "verification": "static_source_only",
-        "reason": "Study lookup is not project-scoped upstream; App has no verified ownership mapping."
-      },
-      {
-        "operation": "GET /v1/studies/{study_id}/analyses",
-        "status": "candidate",
-        "verification": "static_source_only",
-        "reason": "Read remains unexposed until project ownership and live behavior are verified."
-      },
-      {
-        "operation": "GET /v1/studies/{study_id}/integrity",
-        "status": "candidate",
-        "verification": "static_source_only",
-        "reason": "Hash integrity is not trusted timestamping, provenance verification, or live validation."
       },
       {
         "operation": "GET /v1/system/identity",
@@ -193,12 +252,6 @@
         "status": "blocked",
         "verification": "static_source_only",
         "reason": "Intervention execution is run-scoped, requires approval/policy gates, and has no verified real executor or Study/Arm mapping."
-      },
-      {
-        "operation": "POST /v1/studies",
-        "status": "candidate",
-        "verification": "static_source_only",
-        "reason": "Preregistration schema is published, but the App has no project mapping and POST idempotency; live behavior is NOT_RUN."
       },
       {
         "operation": "POST /v1/studies/{study_id}/analyses",
@@ -239,23 +292,30 @@
     "defense_execute": "compatibility entry; executor missing => honest unsupported response"
   },
   "previous_contract": {
-    "runtime_commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
-    "runtime_version": "1.1.0rc2",
-    "api_source_commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
-    "snapshot": "integration-data/agentguard-openapi-63fe1b5.json",
-    "raw_sha256": "2ce83660a67111a346a2de9772fcaec1938a4a5de713439de34a83e372b9a5e5",
-    "canonical_sha256": "d0a04af3d87c9dca3b30aa7feed89f84447103ed9e8c32c063257c8214a25834",
-    "path_count": 86,
-    "runtime_commit_subject": "Refresh WARDEN gate implementation snapshot"
+    "runtime_commit": "9d1c1dc9331f4ce168aab29b860c94b9d65a8321",
+    "runtime_version": "1.1.0rc4",
+    "api_source_commit": "9d1c1dc9331f4ce168aab29b860c94b9d65a8321",
+    "snapshot": "integration-data/agentguard-openapi-9d1c1dc.json",
+    "raw_sha256": "f2b802fd7928bf2701bfbc65e4cf655c8f801a465fe6dd853f938e9d8f75b978",
+    "canonical_sha256": "09b21ab3cd1e95dd3073142e4274b387ffb43689437be3fa60ad0939403f7894",
+    "path_count": 87,
+    "operation_count": 99,
+    "runtime_commit_subject": "freeze research API and WARDEN gate"
   },
   "verification": {
     "source_review": "PASS",
-    "supported_endpoint_schema_diff": "PASS_NO_CHANGES",
+    "supported_endpoint_schema_diff": "PASS_NO_CHANGES_FOR_LEGACY_33",
+    "changed_study_operations_reviewed": [
+      "GET /v1/studies",
+      "POST /v1/studies",
+      "GET /v1/studies/{study_id}/analyses",
+      "POST /v1/studies/{study_id}/analyses"
+    ],
     "static_source_only": true,
-    "live_openapi": "NOT_RUN: no AgentGuard service configured or reachable",
-    "http_smoke": "NOT_RUN: no AgentGuard service or credentials configured",
+    "live_openapi": "PASS_LOCAL_ONLY: local RC5 OpenAPI exactly equals the pinned parsed snapshot and canonical SHA; raw runtime serialization SHA differs",
+    "http_smoke": "PASS_LOCAL_ONLY: direct health/identity/readiness/capabilities plus QWB BFF and Vite-proxy capability GETs; no write requests",
     "warden_live_gate": "BLOCKED",
-    "new_endpoints_exposed_to_application": false
+    "new_execution_operations_exposed_to_application": false
   },
   "capability_status": {
     "published_but_not_app_supported": [
@@ -268,26 +328,6 @@
         "operation": "GET /v1/runs/{run_id}/experiments/paired",
         "status": "candidate",
         "reason": "Run-scoped persisted paired records are separate from project-scoped Study/Arm resources; no App authorization mapping is implemented."
-      },
-      {
-        "operation": "GET /v1/studies",
-        "status": "candidate",
-        "reason": "Upstream list is global and has limit only; App has no project-scoped study ownership mapping or live verification."
-      },
-      {
-        "operation": "GET /v1/studies/{study_id}",
-        "status": "candidate",
-        "reason": "Study lookup is not project-scoped upstream; App has no verified ownership mapping."
-      },
-      {
-        "operation": "GET /v1/studies/{study_id}/analyses",
-        "status": "candidate",
-        "reason": "Read remains unexposed until project ownership and live behavior are verified."
-      },
-      {
-        "operation": "GET /v1/studies/{study_id}/integrity",
-        "status": "candidate",
-        "reason": "Hash integrity is not trusted timestamping, provenance verification, or live validation."
       },
       {
         "operation": "POST /v1/defense-policies/{request_id}/execute",
@@ -315,53 +355,70 @@
         "reason": "Intervention execution is run-scoped, requires approval/policy gates, and has no verified real executor or Study/Arm mapping."
       },
       {
-        "operation": "POST /v1/studies",
-        "status": "candidate",
-        "reason": "Preregisration schema is published, but the App has no project mapping and POST idempotency; live behavior is NOT_RUN."
-      },
-      {
         "operation": "POST /v1/studies/{study_id}/analyses",
         "status": "blocked",
         "reason": "Analysis accepts caller-supplied outcome arrays; refs and hashes are not independent proof of data provenance."
       }
     ],
     "blocked": [
-      "WARDEN Live Gate: BLOCKED; no real runtime execution was validated."
+      "WARDEN Live Gate: BLOCKED; default research backend is synthetic and real runtime/artifact provenance are not validated."
     ]
   },
   "openapi_diff": {
-    "baseline_snapshot": "integration-data/agentguard-openapi-63fe1b5.json",
+    "baseline_snapshot": "integration-data/agentguard-openapi-9d1c1dc.json",
     "added_operations": [],
     "removed_operations": [],
+    "modified_operations": [
+      "GET /v1/studies",
+      "GET /v1/studies/{study_id}/analyses",
+      "POST /v1/studies",
+      "POST /v1/studies/{study_id}/analyses"
+    ],
+    "modified_schemas": [
+      "RegisteredStudy",
+      "ResearchCapabilityItem",
+      "StudyAnalysisReport",
+      "StudyAnalysisRequest",
+      "StudyArmAnalysisInput",
+      "StudyRegistrationRequest",
+      "WardenAuditRequest"
+    ],
     "assert_unchanged_for_supported": [
       "parameters",
       "requestBody",
       "responses",
       "security"
     ],
-    "assert_all_except_info_version": true,
-    "from_version": "1.1.0rc2",
-    "to_version": "1.1.0rc3",
-    "added_schemas": [],
-    "removed_schemas": [],
-    "baseline_raw_sha256": "2ce83660a67111a346a2de9772fcaec1938a4a5de713439de34a83e372b9a5e5",
-    "baseline_canonical_sha256": "d0a04af3d87c9dca3b30aa7feed89f84447103ed9e8c32c063257c8214a25834"
+    "assert_full_operation_unchanged_for_legacy_supported": true,
+    "assert_modified_operations_exact": true,
+    "assert_info_only_version": true,
+    "assert_all_except_info_version": false,
+    "from_version": "1.1.0rc4",
+    "to_version": "1.1.0rc5",
+    "baseline_raw_sha256": "f2b802fd7928bf2701bfbc65e4cf655c8f801a465fe6dd853f938e9d8f75b978",
+    "baseline_canonical_sha256": "09b21ab3cd1e95dd3073142e4274b387ffb43689437be3fa60ad0939403f7894"
   },
   "research_capability_status": {
+    "capability_diagnostics": {
+      "status": "live_local_pass",
+      "operation": "GET /v1/research/capabilities",
+      "reason": "Typed BFF read returned the local AgentGuard RC5 capability report over HTTP; mode is synthetic and WARDEN_URL_NOT_CONFIGURED remains explicit."
+    },
     "study_registration_and_lookup": {
-      "status": "static_only",
+      "status": "static_integrated_live_not_run",
       "published_operations": [
-        "POST /v1/studies",
         "GET /v1/studies",
+        "POST /v1/studies",
         "GET /v1/studies/{study_id}",
         "GET /v1/studies/{study_id}/integrity",
         "GET /v1/studies/{study_id}/analyses"
       ],
-      "reason": "Published in the RC2/RC3 OpenAPI, but no live service verification or App-side project ownership mapping has been completed; POST has no upstream idempotency contract."
+      "reason": "RC5 adds upstream idempotency; App persists project ownership and intent before POST, requires explicit same-key retry for ambiguous submissions, and restricts reads to local project links. Local AgentGuard capability reads passed; project-scoped Study POST/lookup remains NOT_RUN because the local BFF has no DATABASE_URL."
     },
-    "study_analysis": {
+    "study_analysis_write": {
       "status": "blocked",
-      "reason": "The route analyzes caller-supplied paired arrays. Source artifact refs and SHA metadata are not independent proof of provenance, so the App cannot present this as verified live research."
+      "operation": "POST /v1/studies/{study_id}/analyses",
+      "reason": "App does not expose caller-supplied outcomes as verified research. RC5 measured mode returns ARTIFACT_CONTENT_NOT_VERIFIED; source provenance and real WARDEN artifacts remain unverified."
     },
     "four_layer_intervention_execution": {
       "status": "blocked",
@@ -370,13 +427,35 @@
         "POST /v1/runs/{run_id}/experiments/paired",
         "POST /v1/runs/{run_id}/interventions"
       ],
-      "reason": "Paired/intervention routes are run-scoped, not Study/Arm linked; a real paired_executor is unavailable and real WARDEN execution is blocked."
+      "reason": "Run-scoped operations do not create or bind project Study/Arm mappings and real WARDEN execution remains BLOCKED."
     },
     "real_warden_execution": "NOT_RUN",
-    "live_openapi_and_identity": "NOT_RUN",
-    "verification_source": "https://github.com/hauyer/AgentGuard/blob/9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a/docs/integration/I5_WARDEN_LIVE_GATE.md"
+    "live_openapi_and_identity": "PASS_LOCAL_ONLY: RC5 87/99 API, pinned canonical SHA, build_commit c67c7f1; readiness timestamps from upstream are invalid (1970 monotonic-clock formatting)",
+    "verification_source": "https://github.com/hauyer/AgentGuard/blob/d85aa97e1566e2c50816f2ade3129235266ec704/docs/integration/I5_WARDEN_RESEARCH_GATE_2026-10-28.md"
   },
   "historical_contracts": [
+    {
+      "runtime_commit": "9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a",
+      "runtime_version": "1.1.0rc3",
+      "api_source_commit": "9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a",
+      "snapshot": "integration-data/agentguard-openapi-9a8ee1f.json",
+      "raw_sha256": "fadab4d701d23fabda785413cf0c4536fcffec521ea09cbe6ad73a417c15de1e",
+      "canonical_sha256": "52ad0d5dc175e58759196588d1c4ab5b45e82751f882c82ed8540cb963d942f6",
+      "path_count": 86,
+      "operation_count": 98,
+      "runtime_commit_subject": "feat: harden WARDEN integration, evidence contracts, and paired experiment gates"
+    },
+    {
+      "runtime_commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
+      "runtime_version": "1.1.0rc2",
+      "api_source_commit": "63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc",
+      "snapshot": "integration-data/agentguard-openapi-63fe1b5.json",
+      "raw_sha256": "2ce83660a67111a346a2de9772fcaec1938a4a5de713439de34a83e372b9a5e5",
+      "canonical_sha256": "d0a04af3d87c9dca3b30aa7feed89f84447103ed9e8c32c063257c8214a25834",
+      "path_count": 86,
+      "operation_count": 98,
+      "runtime_commit_subject": "Refresh WARDEN gate implementation snapshot"
+    },
     {
       "runtime_commit": "8a7c154116ca48c80e2dbf5291e1ff70f5dbdd25",
       "runtime_version": "1.1.0rc1",
@@ -385,7 +464,125 @@
       "raw_sha256": "d577e6001883ada17d47f195cafe48c5394e46c5f16f587636eb907a1e1aa78e",
       "canonical_sha256": "cf6967dc0a0bb1757193e64a92e2612dd095e203b290db006f3c97a5f5fa3ecc",
       "path_count": 84,
+      "operation_count": 96,
       "runtime_commit_subject": "Harden WARDEN reconciliation and loop budgets"
     }
-  ]
+  ],
+  "legacy_supported_endpoints": [
+    "GET /v1/system/health",
+    "GET /v1/system/readiness",
+    "GET /v1/system/capabilities",
+    "GET /v1/kernel/status",
+    "GET /v1/investigations/options",
+    "GET /v1/scenarios",
+    "POST /v1/investigations",
+    "GET /v1/investigations",
+    "GET /v1/investigations/{request_id}",
+    "GET /v1/investigations/{request_id}/timeline",
+    "GET /v1/investigations/{request_id}/interaction-graph",
+    "GET /v1/runs/{run_id}/findings",
+    "GET /v1/runs/{run_id}/hypotheses",
+    "GET /v1/runs/{run_id}/investigation",
+    "GET /v1/evidence/investigations/{request_id}",
+    "GET /v1/defense-policies/{request_id}",
+    "POST /v1/defense-policies/{request_id}/preview",
+    "GET /v1/reports",
+    "GET /v1/reports/{run_id}",
+    "GET /v1/experiences",
+    "GET /v1/experiments",
+    "GET /v1/experiments/{experiment_id}",
+    "POST /v1/experiments/compare",
+    "POST /v1/investigation-loops",
+    "GET /v1/investigation-loops",
+    "GET /v1/investigation-loops/{loop_id}",
+    "GET /v1/investigation-loops/{loop_id}/decisions",
+    "GET /v1/investigation-loops/{loop_id}/evidence-changes",
+    "GET /v1/investigation-loops/{loop_id}/budget",
+    "GET /v1/research/strategy-evaluations",
+    "GET /v1/research/strategy-evaluations/{evaluation_id}",
+    "GET /v1/investigations/{request_id}/risk-analysis",
+    "GET /v1/system/audit-events"
+  ],
+  "research_contract_assertions": {
+    "capabilities": {
+      "operation": "GET /v1/research/capabilities",
+      "response_schema": "ResearchCapabilityReport",
+      "capability_names": [
+        "research_dataset_mechanism",
+        "sender_receiver_baseline",
+        "agent_isolation",
+        "message_block",
+        "message_replace",
+        "leace_fit_apply",
+        "activation_patch",
+        "residual_edge_patch",
+        "probe_training",
+        "persistent_run",
+        "artifact_content_read"
+      ]
+    },
+    "study_registration": {
+      "operation": "POST /v1/studies",
+      "request_schema": "StudyRegistrationRequest",
+      "response_schema": "RegisteredStudy",
+      "idempotency_header": "Idempotency-Key",
+      "idempotency_header_required": false,
+      "idempotency_pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "idempotency_max_length": 128,
+      "conflict_status": "409"
+    },
+    "study_list": {
+      "operation": "GET /v1/studies",
+      "parameters": [
+        "limit",
+        "offset",
+        "track",
+        "sort_by",
+        "sort_order"
+      ],
+      "sort_by": [
+        "registered_at",
+        "title"
+      ],
+      "sort_order": [
+        "asc",
+        "desc"
+      ]
+    },
+    "study_detail": {
+      "operation": "GET /v1/studies/{study_id}",
+      "response_schema": "RegisteredStudy"
+    },
+    "study_integrity": {
+      "operation": "GET /v1/studies/{study_id}/integrity"
+    },
+    "analysis_list": {
+      "operation": "GET /v1/studies/{study_id}/analyses",
+      "parameters": [
+        "limit",
+        "offset",
+        "evidence_mode",
+        "sort_order"
+      ],
+      "evidence_mode": [
+        "synthetic",
+        "script_replay",
+        "observed",
+        "measured"
+      ],
+      "sort_order": [
+        "asc",
+        "desc"
+      ]
+    },
+    "analysis_write": {
+      "operation": "POST /v1/studies/{study_id}/analyses",
+      "request_schema": "StudyAnalysisRequest",
+      "response_schema": "StudyAnalysisReport",
+      "idempotency_header": "Idempotency-Key",
+      "idempotency_header_required": false,
+      "measured_error_status": "422",
+      "measured_error_code": "ARTIFACT_CONTENT_NOT_VERIFIED"
+    }
+  }
 }

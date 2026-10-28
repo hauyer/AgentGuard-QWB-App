@@ -36,8 +36,10 @@ testpaths = ["tests"]
 addopts = "-q"
 filterwarnings = [
     "error",
-    # starlette.testclient falls back from httpx2 to httpx with a deprecation warning
-    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+    # Starlette changed its warning category; match the narrow message using
+    # Python's stable base category so supported Starlette releases still run.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:DeprecationWarning",
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
 ]
 
 [tool.ruff]

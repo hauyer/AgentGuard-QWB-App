@@ -148,6 +148,44 @@ class InvestigationLoopSubmission(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ProjectStudySubmission(Base):
+    """Durable project ownership and idempotent intent for an AgentGuard Study.
+
+    AgentGuard remains authoritative for Study content. This table only keeps
+    the App's project mapping, request intent and last accepted response so a
+    project can never discover another project's globally indexed Studies.
+    """
+
+    __tablename__ = "project_study_submissions"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "created_by", "idempotency_key_hash",
+            name="uq_project_study_idempotency",
+        ),
+        UniqueConstraint("study_id", name="uq_project_study_upstream_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    study_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    title: Mapped[str] = mapped_column(String(240))
+    track: Mapped[str | None] = mapped_column(String(32), index=True)
+    idempotency_key_hash: Mapped[str] = mapped_column(String(64))
+    request_fingerprint: Mapped[str] = mapped_column(String(64))
+    request_payload: Mapped[str] = mapped_column(Text)
+    response_payload: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    request_id: Mapped[str] = mapped_column(String(128), index=True)
+    source_commit: Mapped[str] = mapped_column(String(40))
+    source_mode: Mapped[str] = mapped_column(String(16), default="unknown")
+    registration_sha256: Mapped[str | None] = mapped_column(String(64))
+    created_by: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class InvestigationBookmark(Base):
     __tablename__ = "investigation_bookmarks"
     __table_args__ = (UniqueConstraint("user_id", "request_id", name="uq_user_bookmark"),)

@@ -24,13 +24,18 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   return parseResponse<T>(response);
 }
 
-export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+export async function apiPost<T>(
+  path: string,
+  body?: unknown,
+  extraHeaders: Record<string, string> = {},
+): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
       "X-CSRF-Token": getCsrfToken(),
+      ...extraHeaders,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

@@ -43,7 +43,9 @@ class _StubServer(uvicorn.Server):
 
 
 def _serve(app) -> str:
-    config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning")
+    # The test stub uses HTTP only; avoid importing optional WebSocket
+    # implementations whose deprecated aliases are warnings-as-errors here.
+    config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning", ws="none")
     server = _StubServer(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
@@ -70,6 +72,14 @@ def stub_base_url() -> Iterator[str]:
 @pytest.fixture(scope="session")
 def stub_base_url_warden_available() -> Iterator[str]:
     yield _serve(create_stub_app(kernel_status="available", warden_available=True))
+
+
+@pytest.fixture(scope="session")
+def stub_base_url_study_ambiguous() -> Iterator[str]:
+    yield _serve(create_stub_app(
+        kernel_status="available", warden_available=True,
+        study_register_ambiguous_once=True,
+    ))
 
 
 @pytest.fixture(scope="session")

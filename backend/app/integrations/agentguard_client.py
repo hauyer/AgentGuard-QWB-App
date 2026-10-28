@@ -1,13 +1,11 @@
 """Unified AgentGuard API client (BFF connector).
 
-Contract baseline (RC3): AgentGuard runtime and API source commit
-9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a (feature/i-reliability-and-live-validation,
-1.1.0rc3; 86 OpenAPI paths). The RC2→RC3 OpenAPI delta changes only `info.version`;
-the 33 App-supported operations retain their existing contracts. Study registry,
-run-scoped paired/intervention, and Probe routes are published but remain outside the
-App client: live behavior, project ownership, data provenance, and real execution are
-not verified. RC2 identity and query-only Loop reconciliation also remain static-only
-candidates and are not exposed by this client. Capability discovery guards tracked
+Contract baseline (RC5): AgentGuard implementation and API source commit
+d85aa97e1566e2c50816f2ade3129235266ec704 (1.1.0rc5; 87 OpenAPI paths). RC5
+preserves the App's previous 33 operations and adds project-scoped Study reads and
+registration through the BFF. Study registration uses RC5's optional upstream
+Idempotency-Key. Analysis writes and WARDEN execution remain blocked because source
+artifacts and real execution are not verified. Capability discovery guards tracked
 operations so older pins degrade explicitly.
 
 Safety rules enforced here (mirror the upstream SDK contract):
@@ -46,6 +44,7 @@ RETRYABLE_GET_STATUS = {502, 503, 504}
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 _SAFE_ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+_SAFE_IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SAFE_MESSAGES = {
     "WARDEN_NOT_CONFIGURED": "WARDEN is not configured on the AgentGuard service.",
     "LOOP_IDEMPOTENCY_CONFLICT": "This Loop idempotency key conflicts with an earlier request.",
@@ -142,6 +141,7 @@ class AgentGuardClient:
         request_id: str | None = None,
         operator: bool = False,
         loop_idempotency_key: str | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         if not path.startswith("/v1/") or "?" in path or "#" in path:
             raise ValueError("path must be a versioned AgentGuard /v1 path")
@@ -161,6 +161,10 @@ class AgentGuardClient:
             headers["X-AgentGuard-Operator-Token"] = self._settings.agentguard_operator_api_token
         if loop_idempotency_key:
             headers["X-Loop-Idempotency-Key"] = loop_idempotency_key
+        if idempotency_key:
+            if not _SAFE_IDEMPOTENCY_KEY.fullmatch(idempotency_key):
+                raise ValueError("idempotency_key does not match the RC5 contract")
+            headers["Idempotency-Key"] = idempotency_key
 
         params: dict[str, Any] = {key: value for key, value in (query or {}).items() if value is not None}
         json_body = None
@@ -419,6 +423,65 @@ class AgentGuardClient:
         )
 
     # ------------------------------------------------------------------ #
+    # J2.1: AgentGuard RC5 research registry (BFF project ownership is local)
+    # ------------------------------------------------------------------ #
+    def get_research_capabilities(self) -> dict[str, Any]:
+        return self.request("GET", "/v1/research/capabilities")
+
+    def list_studies(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        track: str | None = None,
+        sort_by: str = "registered_at",
+        sort_order: str = "desc",
+    ) -> dict[str, Any]:
+        return self.request(
+            "GET", "/v1/studies",
+            query={
+                "limit": limit, "offset": offset, "track": track,
+                "sort_by": sort_by, "sort_order": sort_order,
+            },
+        )
+
+    def register_study(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        idempotency_key: str,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Register a protocol. POST is never retried by the HTTP client."""
+        return self.request(
+            "POST", "/v1/studies", body=payload, request_id=request_id,
+            operator=True, idempotency_key=idempotency_key,
+        )
+
+    def get_study(self, study_id: str) -> dict[str, Any]:
+        return self.request("GET", f"/v1/studies/{_quote(study_id)}")
+
+    def get_study_integrity(self, study_id: str) -> dict[str, Any]:
+        return self.request("GET", f"/v1/studies/{_quote(study_id)}/integrity")
+
+    def list_study_analyses(
+        self,
+        study_id: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        evidence_mode: str | None = None,
+        sort_order: str = "asc",
+    ) -> dict[str, Any]:
+        return self.request(
+            "GET", f"/v1/studies/{_quote(study_id)}/analyses",
+            query={
+                "limit": limit, "offset": offset,
+                "evidence_mode": evidence_mode, "sort_order": sort_order,
+            },
+        )
+
+    # ------------------------------------------------------------------ #
     # E6: investigation service (loop-scoped)
     # ------------------------------------------------------------------ #
     def get_risk_analysis(self, request_id: str) -> dict[str, Any]:
@@ -503,6 +566,12 @@ class AgentGuardClient:
             "GET /v1/defense-policies/{request_id}",
             "GET /v1/research/strategy-evaluations",
             "GET /v1/research/strategy-evaluations/{evaluation_id}",
+            "GET /v1/research/capabilities",
+            "GET /v1/studies",
+            "POST /v1/studies",
+            "GET /v1/studies/{study_id}",
+            "GET /v1/studies/{study_id}/integrity",
+            "GET /v1/studies/{study_id}/analyses",
         ]
         try:
             response = self._http.get("/openapi.json")

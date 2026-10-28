@@ -62,6 +62,45 @@ test("login, project investigation, verified loop, evidence, evaluation, exports
   await login(page, "user-a", "user-a-e2e-password", true);
 
   const projectA = await createProjectAndLink(page, "J7 User A Project", "inv-stub-0001");
+  await page.getByRole("link", { name: "研究工作台" }).click();
+  await expect(page.getByRole("heading", { name: "研究工作台" })).toBeVisible();
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+    { width: 1024, height: 768 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+      .toBe(true);
+    await page.screenshot({
+      path: test.info().outputPath(`research-workbench-${viewport.width}x${viewport.height}.png`),
+      fullPage: true,
+    });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByLabel(/Study 标题/).fill("RC5 preregistered paired comparison");
+  await page.getByLabel(/研究问题/).fill("Does the registered treatment change the declared outcome?");
+  await page.getByLabel(/主要假设/).fill("The treatment arm changes the declared outcome.");
+  await page.getByLabel(/主要结果变量/).fill("srr_itt");
+  await page.getByLabel(/计划配对数/).fill("20");
+  await page.getByLabel(/计划案例族数量/).fill("10");
+  await page.getByLabel(/匹配变量/).fill("case_family");
+  await page.getByLabel(/纳入条件/).fill("Records conform to the preregistered schema.");
+  await page.getByLabel(/停止规则/).fill("Stop after all planned pairs resolve.");
+  await page.getByLabel(/缺失数据规则/).fill("Report missing values without imputation.");
+  await page.getByLabel(/实验臂定义 JSON/).fill(JSON.stringify([
+    { arm_id: "baseline", role: "baseline", method_id: "control", method_version: "1", parameter_sha256: "a".repeat(64) },
+    { arm_id: "treatment", role: "treatment", method_id: "method-a", method_version: "1", parameter_sha256: "b".repeat(64) },
+  ]));
+  await page.getByRole("button", { name: "预览注册摘要" }).click();
+  await expect(page.getByRole("region", { name: "不可变注册摘要" })).toContainText("RC5 preregistered paired comparison");
+  await page.getByRole("button", { name: "确认并登记 Study" }).click();
+  await expect(page.getByText(/Study 已登记并绑定到当前项目/)).toBeVisible();
+  await expect(page.getByText("study-stub-0001", { exact: true }).first()).toBeVisible();
+
+  await page.getByRole("link", { name: "项目管理" }).click();
+  await projectA.getByRole("button", { name: "管理" }).click();
   await projectA.getByPlaceholder("用户名").fill("user-b");
   await projectA.locator("select").selectOption("viewer");
   await projectA.getByRole("button", { name: "添加" }).click();

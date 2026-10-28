@@ -93,6 +93,33 @@ def test_loop_create_sends_operator_and_idempotency_headers_without_retry() -> N
     assert json.loads(request.content) == payload
 
 
+def test_rc5_study_create_sends_idempotency_header_and_never_auto_retries() -> None:
+    settings = make_settings(agentguard_operator_api_token="operator-secret")
+    transport = _transport_returning(
+        httpx.Response(503, json={"detail": {"error": "TRY_AGAIN", "message": "upstream unavailable"}})
+    )
+    payload = {"title": "Preregistered study"}
+    with AgentGuardClient(settings, transport=transport) as client, pytest.raises(AgentGuardError):
+        client.register_study(payload, idempotency_key="stable.study-key", request_id="study-request-1")
+    assert len(transport.requests) == 1
+    request = transport.requests[0]
+    assert request.method == "POST"
+    assert request.url.path == "/v1/studies"
+    assert request.headers["Idempotency-Key"] == "stable.study-key"
+    assert request.headers["X-AgentGuard-Operator-Token"] == "operator-secret"
+    assert request.headers["X-Request-ID"] == "study-request-1"
+    assert json.loads(request.content) == payload
+
+
+def test_rc5_study_create_rejects_invalid_idempotency_key_before_network() -> None:
+    transport = _transport_returning(httpx.Response(201, json={"study_id": "study-1"}))
+    with AgentGuardClient(make_settings(), transport=transport) as client, pytest.raises(
+        ValueError, match="idempotency_key"
+    ):
+        client.register_study({"title": "Preregistered study"}, idempotency_key="bad key")
+    assert transport.requests == []
+
+
 def test_does_not_send_token_when_unset() -> None:
     settings = make_settings()
     transport = _transport_returning(httpx.Response(200, json={"status": "ok"}))

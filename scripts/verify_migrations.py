@@ -24,6 +24,7 @@ REQUIRED_TABLES = {
     "alembic_version", "users", "projects", "project_members",
     "project_investigations", "investigation_bookmarks", "report_exports",
     "project_investigation_loops", "investigation_loop_submissions",
+    "project_study_submissions",
     "demo_scenarios", "ui_preferences", "app_audit_events",
 }
 REQUIRED_USER_COLUMNS = {"password_hash", "is_active"}

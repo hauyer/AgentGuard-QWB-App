@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, MemoryRouter, Route, Routes, RouterProvider } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppLayout } from "../../components/layout/AppLayout";
@@ -214,16 +214,22 @@ describe("SystemOverviewPage", () => {
 describe("AppLayout navigation", () => {
   it("renders the global navigation", () => {
     useAuthStore.getState().clearSession();
-    renderWithProviders(
-      <Routes>
-        <Route path="/" element={<AppLayout />}>
-          <Route index element={<SystemOverviewPage />} />
-        </Route>
-      </Routes>,
+    const router = createMemoryRouter([
+      {
+        path: "/",
+        element: <AppLayout />,
+        children: [{ index: true, element: <SystemOverviewPage />, handle: { title: "系统总览" } }],
+      },
+    ]);
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
     );
     const nav = screen.getByRole("navigation");
     expect(within(nav).getByText("系统总览")).toBeInTheDocument();
     expect(within(nav).getByText("安全调查")).toBeInTheDocument();
+    expect(within(nav).getByText("研究工作台")).toBeInTheDocument();
     expect(within(nav).getByText("交互图谱")).toBeInTheDocument();
     expect(within(nav).getByText("证据分析")).toBeInTheDocument();
     expect(within(nav).getByText("定向防御")).toBeInTheDocument();

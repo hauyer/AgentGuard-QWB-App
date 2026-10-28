@@ -44,6 +44,7 @@ def test_initial_migration_creates_all_app_tables(tmp_path) -> None:
         "project_investigations",
         "project_investigation_loops",
         "investigation_loop_submissions",
+        "project_study_submissions",
         "investigation_bookmarks",
         "report_exports",
         "demo_scenarios",
@@ -69,6 +70,58 @@ def test_migration_downgrade_removes_app_tables(tmp_path) -> None:
 
     assert "app_audit_events" not in tables
     assert "users" not in tables
+
+
+def test_project_study_migration_persists_intents_and_enforces_unique_mapping(tmp_path) -> None:
+    db_path = tmp_path / "project-studies.db"
+    database_url = f"sqlite:///{db_path.as_posix()}"
+    command.upgrade(_alembic_config(database_url), "head")
+    engine = create_engine(database_url)
+    try:
+        inspector = inspect(engine)
+        constraints = {
+            item["name"]: tuple(item["column_names"])
+            for item in inspector.get_unique_constraints("project_study_submissions")
+        }
+        assert constraints == {
+            "uq_project_study_idempotency": (
+                "project_id", "created_by", "idempotency_key_hash",
+            ),
+            "uq_project_study_upstream_id": ("study_id",),
+        }
+        columns = {item["name"] for item in inspector.get_columns("project_study_submissions")}
+        assert {
+            "request_fingerprint", "request_payload", "response_payload", "status",
+            "request_id", "source_commit", "source_mode", "registration_sha256",
+        } <= columns
+
+        with engine.begin() as connection:
+            project_id = connection.execute(
+                text("INSERT INTO projects (name, status) VALUES ('study-project', 'active') RETURNING id")
+            ).scalar_one()
+            connection.execute(
+                text(
+                    "INSERT INTO project_study_submissions "
+                    "(project_id, study_id, title, idempotency_key_hash, request_fingerprint, "
+                    "request_payload, status, request_id, source_commit, source_mode, created_by) "
+                    "VALUES (:project_id, 'study-unique', 'Study', :idem, :fingerprint, '{}', "
+                    "'LINKED', 'request-1', 'd85aa97e1566e2c50816f2ade3129235266ec704', 'live', 'alice')"
+                ),
+                {"project_id": project_id, "idem": "1" * 64, "fingerprint": "2" * 64},
+            )
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO project_study_submissions "
+                    "(project_id, study_id, title, idempotency_key_hash, request_fingerprint, "
+                    "request_payload, status, request_id, source_commit, source_mode, created_by) "
+                    "VALUES (:project_id, 'study-unique', 'Other', :idem, :fingerprint, '{}', "
+                    "'LINKED', 'request-2', 'd85aa97e1566e2c50816f2ade3129235266ec704', 'live', 'bob')"
+                ),
+                {"project_id": project_id, "idem": "3" * 64, "fingerprint": "4" * 64},
+            )
+    finally:
+        engine.dispose()
 
 
 def test_loop_ownership_migration_matches_orm_and_enforces_constraints(tmp_path) -> None:
@@ -216,5 +269,6 @@ def test_upgrade_from_0004_preserves_existing_project_investigation_data(tmp_pat
             "legacy-request", "Legacy", "preserve", "verified", "unknown", "legacy-run")
         assert "project_investigation_loops" in set(inspect(verify_engine).get_table_names())
         assert "investigation_loop_submissions" in set(inspect(verify_engine).get_table_names())
+        assert "project_study_submissions" in set(inspect(verify_engine).get_table_names())
     finally:
         verify_engine.dispose()

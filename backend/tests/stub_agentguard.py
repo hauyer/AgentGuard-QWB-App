@@ -9,6 +9,8 @@ not_configured.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -83,12 +85,20 @@ def create_stub_app(
     strategy_evaluations_available: bool = False,
     investigation_loop_report_available: bool = False,
     e2e_isolation_loops: bool = False,
+    study_register_ambiguous_once: bool = False,
     report_empty_evidence: bool = False,
     report_long_text: bool = False,
 ) -> FastAPI:
     app = FastAPI(title="AgentGuard Stub")
 
-    state = {"kernel_status": kernel_status, "warden_available": warden_available}
+    state = {
+        "kernel_status": kernel_status,
+        "warden_available": warden_available,
+        "study_register_ambiguous_once": study_register_ambiguous_once,
+        "study_ambiguous_sent": False,
+        "studies": {},
+        "study_idempotency": {},
+    }
     # request_ids the stub will acknowledge as existing (B11 contract fidelity:
     # GET on an unknown id must 404, matching the real AgentGuard service)
     known_investigations: set[str] = {"inv-stub-0001", "inv-stub-graph-0002"}
@@ -637,5 +647,119 @@ def create_stub_app(
                             "model_calls_used": 0, "steps_to_first_evidence": None},
                 "remaining": {"actions_left": 2, "seconds_left": 58.5, "model_calls_left": 5},
             }
+
+    @app.get("/v1/research/capabilities")
+    def research_capabilities() -> dict:
+        capability_names = [
+            "research_dataset_mechanism", "sender_receiver_baseline", "agent_isolation",
+            "message_block", "message_replace", "leace_fit_apply", "activation_patch",
+            "residual_edge_patch", "probe_training", "persistent_run", "artifact_content_read",
+        ]
+        observed_at = datetime.now(UTC).isoformat()
+        return {
+            "schema_version": "1.0",
+            "backend_status": "blocked",
+            "source": "stub:research-capability-fixture",
+            "source_version": "stub",
+            "source_api_version": "1.1.0rc5",
+            "observed_at": observed_at,
+            "capabilities": [
+                {
+                    "capability": name,
+                    "status": "SUPPORTED_BUT_BLOCKED",
+                    "blockers": ["TEST_STUB_ONLY", "WARDEN_LIVE_GATE_BLOCKED"],
+                    "source_version": "stub",
+                    "source_api_version": "1.1.0rc5",
+                    "advertised_by_warden": False,
+                    "observed_at": observed_at,
+                    "evidence_refs": [],
+                    "operation_id": None,
+                    "contract_ref": None,
+                }
+                for name in capability_names
+            ],
+            "limitations": ["Test stub only; this response is not a real WARDEN capability check."],
+        }
+
+    @app.get("/v1/studies")
+    def list_studies(
+        limit: int = 100,
+        offset: int = 0,
+        track: str | None = None,
+        sort_by: str = "registered_at",
+        sort_order: str = "desc",
+    ) -> dict:
+        items = list(state["studies"].values())
+        if track:
+            items = [item for item in items if item.get("track") == track]
+        reverse = sort_order == "desc"
+        items.sort(key=lambda item: item.get("title", "") if sort_by == "title" else item.get("registered_at", ""),
+                   reverse=reverse)
+        page = items[offset:offset + limit]
+        next_offset = offset + len(page) if offset + len(page) < len(items) else None
+        return {"schema_version": "1.0", "items": page, "count": len(items),
+                "limit": limit, "offset": offset, "next_offset": next_offset}
+
+    @app.post("/v1/studies", status_code=201)
+    def register_study(
+        payload: dict,
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict:
+        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        fingerprint = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        if idempotency_key and idempotency_key in state["study_idempotency"]:
+            prior_fingerprint, study_id = state["study_idempotency"][idempotency_key]
+            if prior_fingerprint != fingerprint:
+                raise HTTPException(status_code=409, detail={
+                    "error": "IDEMPOTENCY_CONFLICT", "message": "Idempotency-Key conflicts with a previous request."
+                })
+            return state["studies"][study_id]
+        study_id = f"study-stub-{len(state['studies']) + 1:04d}"
+        response = {
+            **payload,
+            "schema_version": "0.1",
+            "study_id": study_id,
+            "status": "registered",
+            "registered_at": datetime.now(UTC).isoformat(),
+            "registration_sha256": fingerprint,
+        }
+        state["studies"][study_id] = response
+        if idempotency_key:
+            state["study_idempotency"][idempotency_key] = (fingerprint, study_id)
+        if state["study_register_ambiguous_once"] and not state["study_ambiguous_sent"]:
+            state["study_ambiguous_sent"] = True
+            raise HTTPException(status_code=503, detail={
+                "error": "STUB_RESPONSE_LOST", "message": "The stub saved this Study before simulating a lost response."
+            })
+        return response
+
+    @app.get("/v1/studies/{study_id}")
+    def get_study(study_id: str) -> dict:
+        study = state["studies"].get(study_id)
+        if study is None:
+            raise HTTPException(status_code=404, detail={"error": "STUDY_NOT_FOUND", "message": "Study not found"})
+        return study
+
+    @app.get("/v1/studies/{study_id}/integrity")
+    def get_study_integrity(study_id: str) -> dict:
+        study = state["studies"].get(study_id)
+        if study is None:
+            raise HTTPException(status_code=404, detail={"error": "STUDY_NOT_FOUND", "message": "Study not found"})
+        return {"study_id": study_id, "registration_sha256": study["registration_sha256"],
+                "integrity_status": "valid", "limitations": ["Test stub fixture."]}
+
+    @app.get("/v1/studies/{study_id}/analyses")
+    def list_study_analyses(
+        study_id: str,
+        limit: int = 100,
+        offset: int = 0,
+        evidence_mode: str | None = None,
+        sort_order: str = "asc",
+    ) -> dict:
+        if study_id not in state["studies"]:
+            raise HTTPException(status_code=404, detail={"error": "STUDY_NOT_FOUND", "message": "Study not found"})
+        return {"schema_version": "1.0", "items": [], "count": 0, "limit": limit,
+                "offset": offset, "next_offset": None, "evidence_mode": evidence_mode,
+                "limitations": ["Test stub has no analysis records; no results were fabricated."]}
 
     return app

@@ -11,9 +11,21 @@ test("console boots and shows system status", async ({ page }) => {
   const synthetic = page.getByText("SYNTHETIC", { exact: true });
   const unavailable = page.getByText("UNAVAILABLE");
   await expect(live.or(synthetic).or(unavailable).first()).toBeVisible({ timeout: 15_000 });
-  await page.screenshot({ path: test.info().outputPath("system-overview-desktop.png"), fullPage: true });
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+    { width: 1024, height: 768 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+      .toBe(true);
+    await page.screenshot({
+      path: test.info().outputPath(`system-overview-${viewport.width}x${viewport.height}.png`),
+      fullPage: true,
+    });
+  }
 
-  await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("button", { name: "打开导航" })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath("system-overview-mobile.png"), fullPage: true });
   await page.getByRole("button", { name: "打开导航" }).click();

@@ -1,5 +1,7 @@
 # APP-1 — Upstream publish and static pin
 
+> Historical RC3 pin review below is retained. RC5 is the current pin; see the update at the end.
+
 **Status:** PASS for static compatibility; live release gate remains closed.
 **Runtime/API source pin:** AgentGuard `9a8ee1f5e78a0b254c17ea66ac5b140aa7e1e89a`, `1.1.0rc3`.
 **Latest upstream branch documentation head checked:** `a5d5603cc653e17025038f3eb0606bc28d8bbd70` (documentation-only acceptance follow-up).
@@ -32,3 +34,10 @@
 ## Rollback
 
 Restore the RC2 runtime/source pin `63fe1b5662df93fbf06750ecf09c14ee9e6bd5cc` and select `integration-data/agentguard-openapi-63fe1b5.json`. Keep the RC3 snapshot and diff report for audit.
+
+## RC5 update — 2026-10-28
+
+- Current runtime/API source: `d85aa97e1566e2c50816f2ade3129235266ec704` (`1.1.0rc5`); current branch head `c67c7f1f186aeec6d95d6a6c1c0a48bb1a84ea38` is documentation-only and is the subject of passing AgentGuard CI run `40704083443`.
+- RC5 exact snapshot: 87 paths / 99 operations, raw SHA-256 `605a9cd95f0edeedd4d7235fe46a4a6d8c99ffeb4aab00e2e7f51b2addc2a6b7`, canonical SHA-256 `b7722098b9adac87386a62325b19240e5c7024f704d7024a38ad3a2fb6ca8acd`.
+- RC4→RC5 adds/removes no paths or operations; four operation objects and seven schemas change. All 33 legacy App operations remain exact. Full diff: [`AGENTGUARD_OPENAPI_DIFF_RC5.md`](../api/AGENTGUARD_OPENAPI_DIFF_RC5.md).
+- The App statically integrates project-scoped Study registration/read flows and capability display. HTTP Smoke remains **NOT_RUN**; WARDEN Live Gate remains **BLOCKED**.

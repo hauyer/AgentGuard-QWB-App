@@ -1,5 +1,7 @@
 # APP-0 — Baseline, permissions, and pin
 
+> Historical baseline findings below are retained. RC5 pin and implementation supersede the earlier no-Study-mapping statement; see the RC5 update at the end.
+
 **Status:** PASS for repository baseline and contract inventory.
 **Audit start:** `74627b234a86ef13615e90346e0c8f3a3c86fc7e` on `feature/b25-b33-real-integration`.
 
@@ -30,3 +32,7 @@
 ## Rollback
 
 Use the retained RC2 snapshot and metadata in `integration-data/agentguard-openapi-63fe1b5.json`. No database or runtime data was changed by APP-0.
+
+## RC5 update — 2026-10-28
+
+The App now pins AgentGuard runtime/API source `d85aa97e1566e2c50816f2ade3129235266ec704` (`1.1.0rc5`) and records the documentation-only latest branch head separately. It retains exact RC4 and RC5 snapshots and tests the four-operation/seven-schema diff plus all prior 33 operations. Migration 0009 adds durable project Study links and submission intents. Static compatibility is checked; live HTTP smoke remains **NOT_RUN**, and WARDEN execution remains **BLOCKED**.
