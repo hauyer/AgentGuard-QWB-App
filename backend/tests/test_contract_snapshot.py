@@ -19,7 +19,7 @@ SPEC.loader.exec_module(contract_check)
 
 def test_checked_in_snapshot_matches_the_pin() -> None:
     openapi = contract_check.validate_snapshot()
-    assert len(openapi["paths"]) == 93
+    assert len(openapi["paths"]) == 97
     operations = contract_check._operations(openapi)
     assert "POST /v1/investigation-loops" in operations
     assert "GET /v1/research/strategy-evaluations" in operations

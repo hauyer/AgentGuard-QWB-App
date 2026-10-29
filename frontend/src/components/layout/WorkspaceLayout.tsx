@@ -10,7 +10,7 @@ import "../../features/observatory/observatory.css";
 import "./workspace.css";
 
 const EXPERIMENT_PATHS = new Set(["/sandbox", "/detection", "/intervention-lab", "/analysis", "/research"]);
-const CONTEXT_KEYS = ["projectId", "studyId", "workflowId", "mode"];
+const CONTEXT_KEYS = ["projectId", "studyId", "workflowId", "batchId", "compareWorkflowId", "mode"];
 const MAIN_NAV = [
   { to: "/sandbox", label: "总控台", icon: Activity }, { to: "/detection", label: "通信检测台", icon: Network },
   { to: "/intervention-lab", label: "干预实验台", icon: Shield }, { to: "/analysis", label: "结果分析台", icon: BarChart3 },

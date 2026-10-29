@@ -481,6 +481,20 @@ class AgentGuardClient:
         return self.request("GET", f"/v1/studies/{_quote(study_id)}/run-batches",
                             query={"limit": limit, "offset": offset})
 
+    def submit_replicate_batch(self, study_id: str, replicate_id: str, key: str) -> dict[str, Any]:
+        return self.request("POST", f"/v1/studies/{_quote(study_id)}/replicate-batches",
+                            body={"replicate_id": replicate_id}, operator=True,
+                            idempotency_key=key, timeout_seconds=120)
+
+    def get_batch_comparison(self, study_id: str, batch_id: str) -> dict[str, Any]:
+        return self.request("GET", f"/v1/studies/{_quote(study_id)}/comparisons/batches/{_quote(batch_id)}")
+
+    def get_submission_intent(self, study_id: str, key: str) -> dict[str, Any]:
+        return self.request("GET", f"/v1/studies/{_quote(study_id)}/submission-intents/{_quote(key)}")
+
+    def get_execution_contract(self, study_id: str, arm_id: str) -> dict[str, Any]:
+        return self.request("GET", f"/v1/studies/{_quote(study_id)}/arms/{_quote(arm_id)}/execution-contract")
+
     def get_study_run(self, study_id: str, workflow_id: str) -> dict[str, Any]:
         return self.request("GET", f"/v1/studies/{_quote(study_id)}/runs/{_quote(workflow_id)}")
 

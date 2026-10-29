@@ -1,28 +1,28 @@
 {
-  "schema_version": "1.7",
+  "schema_version": "1.8",
   "pinned_agentguard": {
     "repository": "https://github.com/hauyer/AgentGuard",
     "branch": "feature/i-reliability-and-live-validation",
-    "commit": "e69333eca2c4f54c88eb7327c42c0007ac42c3fb",
-    "commit_short": "e69333e",
-    "commit_subject": "fix: report readiness for reviewed frozen S protocols",
-    "api_source_commit": "e69333eca2c4f54c88eb7327c42c0007ac42c3fb",
+    "commit": "39983e6cc526a430f384277e45471089646512ba",
+    "commit_short": "39983e6",
+    "commit_subject": "Keep API event loop responsive while durable audit writes wait",
+    "api_source_commit": "39983e6cc526a430f384277e45471089646512ba",
     "pinned_at": "2026-10-29",
-    "previous_pin": "033d4f2158fbac75890af3e4fc5a32188261d8ef",
+    "previous_pin": "f04cc96b7e040a4b26b6894d74f26e0963f9989e",
     "upstream_version": "1.1.0rc5",
     "upstream_branch_head": "38d898695b47d92528f3b64ef5f2b3f19e5c25e7",
     "upstream_branch_head_subject": "Baseline before local Stego Sandbox work",
     "upstream_branch_head_delta": "Pinned implementation is a local commit; not pushed. Remote CI remains historical."
   },
   "openapi": {
-    "path_count": 93,
-    "operation_count": 107,
-    "sha256_file": "e11167fd03940220b0443ee891e80c08081173112729c5c3d8b26571ab54c816",
-    "sha256_canonical_json": "8eb0011f1d38ba38d7a3f95c9ca4ef70fad5e498fe7f47cbd7a097c268d5fa96",
+    "path_count": 97,
+    "operation_count": 111,
+    "sha256_file": "f8f3896be62e01989209975058dadafb7b14d367190330316236cf5d81caf9fa",
+    "sha256_canonical_json": "6c48e2403687584c001abc8b3923cbd1103ca28209c7e4fff7820820ea9eb659",
     "canonicalization": "UTF-8 JSON; recursively sorted object keys; compact separators; Unicode unescaped",
     "verified_at": "2026-10-29",
-    "snapshot": "integration-data/agentguard-openapi-stego-sandbox-v1.json",
-    "source_commit": "e69333eca2c4f54c88eb7327c42c0007ac42c3fb",
+    "snapshot": "integration-data/agentguard-openapi-stego-sandbox-v2.json",
+    "source_commit": "39983e6cc526a430f384277e45471089646512ba",
     "verification_method": "local_committed_runtime_with_full_legacy_field_equality",
     "live_openapi": "PASS_LOCAL_ONLY",
     "live_observation": {
@@ -115,7 +115,11 @@
     "GET /v1/studies/{study_id}/run-batches",
     "GET /v1/studies/{study_id}/runs/{workflow_id}/timeline",
     "GET /v1/studies/{study_id}/runs/{workflow_id}/visualization",
-    "POST /v1/studies/{study_id}/run-batches"
+    "POST /v1/studies/{study_id}/run-batches",
+    "GET /v1/studies/{study_id}/arms/{arm_id}/execution-contract",
+    "GET /v1/studies/{study_id}/comparisons/batches/{batch_id}",
+    "GET /v1/studies/{study_id}/submission-intents/{intent_key}",
+    "POST /v1/studies/{study_id}/replicate-batches"
   ],
   "unsupported_capabilities": {},
   "contract_assertions": {
@@ -375,12 +379,16 @@
   "openapi_diff": {
     "baseline_snapshot": "integration-data/agentguard-openapi-9d1c1dc.json",
     "added_operations": [
+      "GET /v1/studies/{study_id}/arms/{arm_id}/execution-contract",
       "GET /v1/studies/{study_id}/comparison",
+      "GET /v1/studies/{study_id}/comparisons/batches/{batch_id}",
       "GET /v1/studies/{study_id}/run-batches",
       "GET /v1/studies/{study_id}/runs",
       "GET /v1/studies/{study_id}/runs/{workflow_id}",
       "GET /v1/studies/{study_id}/runs/{workflow_id}/timeline",
       "GET /v1/studies/{study_id}/runs/{workflow_id}/visualization",
+      "GET /v1/studies/{study_id}/submission-intents/{intent_key}",
+      "POST /v1/studies/{study_id}/replicate-batches",
       "POST /v1/studies/{study_id}/run-batches",
       "POST /v1/studies/{study_id}/runs"
     ],
@@ -425,6 +433,7 @@
       "MessageEdge",
       "OptionalMetric",
       "ProbeEvidence",
+      "ReplicateBatchRequest",
       "StudyRunRequest",
       "VerifiedViewArtifact"
     ]

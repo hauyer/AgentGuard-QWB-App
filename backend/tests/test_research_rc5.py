@@ -93,31 +93,34 @@ def test_study_registration_is_project_scoped_and_idempotent(live_project_env) -
         other = Project(name="p-study-isolation", description=None, status="active", created_by="alice")
         session.add(other)
         session.flush()
-        session.add(ProjectMember(
-            project_id=other.id, username="alice", role="admin", added_by="alice",
-        ))
+        session.add(
+            ProjectMember(
+                project_id=other.id,
+                username="alice",
+                role="admin",
+                added_by="alice",
+            )
+        )
         other_project_id = other.id
         session.commit()
 
-    cross_project = client.get(
-        f"/api/projects/{other_project_id}/studies/{item['study_id']}"
-    )
+    cross_project = client.get(f"/api/projects/{other_project_id}/studies/{item['study_id']}")
     assert cross_project.status_code == 404
     assert cross_project.json()["detail"]["error"] == "STUDY_NOT_FOUND"
     for suffix in ("/runs", "/runs/known-workflow"):
-        denied = client.get(
-            f"/api/projects/{other_project_id}/studies/{item['study_id']}{suffix}"
-        )
+        denied = client.get(f"/api/projects/{other_project_id}/studies/{item['study_id']}{suffix}")
         assert denied.status_code == 404
     denied_submit = client.post(
         f"/api/projects/{other_project_id}/studies/{item['study_id']}/runs",
-        json={"arm_id": "baseline"}, headers={**_csrf(client), "Idempotency-Key": "cross-project"},
+        json={"arm_id": "baseline"},
+        headers={**_csrf(client), "Idempotency-Key": "cross-project"},
     )
     assert denied_submit.status_code == 404
 
 
 def test_ambiguous_study_post_requires_explicit_same_key_replay(
-    live_project_env, stub_base_url_study_ambiguous: str,
+    live_project_env,
+    stub_base_url_study_ambiguous: str,
 ) -> None:
     client, settings, login = live_project_env
     login()
@@ -149,12 +152,16 @@ def test_ambiguous_study_post_requires_explicit_same_key_replay(
         assert rows[0].status == "LINKED"
         assert rows[0].study_id == "study-stub-0001"
 
+
 def test_experiment_views_enforce_project_link_and_forward_bounded_cursor(live_project_env, monkeypatch):
     client, _, login = live_project_env
     login()
     project_id = _project_id(client)
-    created = client.post(f"/api/projects/{project_id}/studies", json=_registration(),
-                          headers={**_csrf(client), "Idempotency-Key": "view-study-1"})
+    created = client.post(
+        f"/api/projects/{project_id}/studies",
+        json=_registration(),
+        headers={**_csrf(client), "Idempotency-Key": "view-study-1"},
+    )
     assert created.status_code == 201, created.text
     study_id = created.json()["submission"]["study_id"]
     seen = []
@@ -181,15 +188,89 @@ def test_batch_requires_csrf_and_uses_operator_client(live_project_env, monkeypa
     client, _, login = live_project_env
     login()
     project_id = _project_id(client)
-    created = client.post(f"/api/projects/{project_id}/studies", json=_registration(),
-                          headers={**_csrf(client), "Idempotency-Key": "batch-study-1"})
+    created = client.post(
+        f"/api/projects/{project_id}/studies",
+        json=_registration(),
+        headers={**_csrf(client), "Idempotency-Key": "batch-study-1"},
+    )
     study_id = created.json()["submission"]["study_id"]
     seen = []
-    monkeypatch.setattr(AgentGuardClient, "submit_study_batch", lambda self, study, key:
-                        (seen.append((study, key)), {"schema_version": "stego.batch/1", "items": []})[1])
+    monkeypatch.setattr(
+        AgentGuardClient,
+        "submit_study_batch",
+        lambda self, study, key: (seen.append((study, key)), {"schema_version": "stego.batch/1", "items": []})[1],
+    )
     url = f"/api/projects/{project_id}/studies/{study_id}/run-batches"
     assert client.post(url, headers={"Idempotency-Key": "batch-key"}).status_code == 403
     assert seen == []
     response = client.post(url, headers={**_csrf(client), "Idempotency-Key": "batch-key"})
     assert response.status_code == 200, response.text
     assert seen == [(study_id, "batch-key")]
+
+
+def test_replicate_batch_and_scoped_comparison_keep_csrf_and_ownership(live_project_env, monkeypatch):
+    client, _, login = live_project_env
+    login()
+    project_id = _project_id(client)
+    created = client.post(
+        f"/api/projects/{project_id}/studies",
+        json=_registration(),
+        headers={**_csrf(client), "Idempotency-Key": "replicate-registration"},
+    )
+    study_id = created.json()["submission"]["study_id"]
+    calls = []
+    monkeypatch.setattr(
+        AgentGuardClient,
+        "submit_replicate_batch",
+        lambda self, study, rep, key: calls.append((study, rep, key)) or {"batch_id": "batch-test"},
+    )
+    monkeypatch.setattr(
+        AgentGuardClient,
+        "get_batch_comparison",
+        lambda self, study, batch: calls.append((study, batch)) or {"batch_id": batch, "status": "incomplete"},
+    )
+    base = f"/api/projects/{project_id}/studies/{study_id}"
+    assert (
+        client.post(
+            base + "/replicate-batches", json={"replicate_id": "r1"}, headers={"Idempotency-Key": "intent"}
+        ).status_code
+        == 403
+    )
+    headers = {**_csrf(client), "Idempotency-Key": "intent"}
+    assert (
+        client.post(
+            base + "/replicate-batches", json={"replicate_id": "r1", "target": "other"}, headers=headers
+        ).status_code
+        == 422
+    )
+    assert not calls
+    assert client.post(base + "/replicate-batches", json={"replicate_id": "r1"}, headers=headers).status_code == 200
+    assert calls == [(study_id, "r1", "intent")]
+    assert client.get(base + "/comparisons/batches/batch-test").json()["batch_id"] == "batch-test"
+    count = len(calls)
+    assert client.get(f"/api/projects/999999/studies/{study_id}/comparisons/batches/batch-test").status_code == 404
+    assert len(calls) == count
+
+
+def test_execution_contract_is_read_only_and_requires_project_ownership(live_project_env, monkeypatch):
+    client, _, login = live_project_env
+    login()
+    project_id = _project_id(client)
+    created = client.post(
+        f"/api/projects/{project_id}/studies", json=_registration(),
+        headers={**_csrf(client), "Idempotency-Key": "target-contract-registration"},
+    )
+    study_id = created.json()["submission"]["study_id"]
+    calls = []
+    monkeypatch.setattr(
+        AgentGuardClient, "get_execution_contract",
+        lambda self, study, arm: calls.append((study, arm)) or {
+            "status": "verified_frozen_contract", "contract": {"target_ref": "agent:sender"}},
+    )
+    base = f"/api/projects/{project_id}/studies/{study_id}/arms/baseline/execution-contract"
+    assert client.get(base).json()["contract"]["target_ref"] == "agent:sender"
+    assert calls == [(study_id, "baseline")]
+    assert client.get(base.replace(f"projects/{project_id}", "projects/999999")).status_code == 404
+    assert calls == [(study_id, "baseline")]
+
+

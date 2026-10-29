@@ -24,7 +24,7 @@ from app.services.project_service import ProjectServiceError, require_project_ac
 
 router = APIRouter()
 
-AGENTGUARD_RC5_SOURCE = "e69333eca2c4f54c88eb7327c42c0007ac42c3fb"
+AGENTGUARD_RC5_SOURCE = "39983e6cc526a430f384277e45471089646512ba"
 MAX_STUDY_REQUEST_BYTES = 1024 * 1024
 IDEMPOTENCY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -600,6 +600,74 @@ def list_project_study_runs(
         return error
     try:
         return client.list_study_runs(study_id)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+@router.post("/projects/{project_id}/studies/{study_id}/replicate-batches", response_model=None)
+def submit_project_replicate_batch(
+    request: Request, project_id: int, study_id: str, client: ClientDep, user: AnalystCsrf,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
+    payload: Annotated[dict[str, Any], Body()],
+) -> dict | JSONResponse:
+    try:
+        require_project_access(request.app.state.settings, user, project_id, required_role="analyst")
+    except ProjectServiceError as exc:
+        return _error(exc.status_code, exc.code, str(exc))
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    if (set(payload) != {"replicate_id"} or not isinstance(payload["replicate_id"], str)
+            or not IDEMPOTENCY_PATTERN.fullmatch(payload["replicate_id"])
+            or not IDEMPOTENCY_PATTERN.fullmatch(idempotency_key)):
+        return _error(422, "REPLICATE_BATCH_INVALID", "重复实验需要新的重复编号和有效提交意图。")
+    try:
+        return client.submit_replicate_batch(study_id, payload["replicate_id"], idempotency_key)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+@router.get("/projects/{project_id}/studies/{study_id}/comparisons/batches/{batch_id}", response_model=None)
+def project_batch_comparison(
+    request: Request, project_id: int, study_id: str, batch_id: str, client: ClientDep, user: Viewer,
+) -> dict | JSONResponse:
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    if not IDEMPOTENCY_PATTERN.fullmatch(batch_id):
+        return _error(422, "COMPARISON_BATCH_INVALID", "批次编号无效。")
+    try:
+        return client.get_batch_comparison(study_id, batch_id)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+@router.get("/projects/{project_id}/studies/{study_id}/submission-intents/{intent_key}", response_model=None)
+def project_submission_intent(
+    request: Request, project_id: int, study_id: str, intent_key: str, client: ClientDep, user: Viewer,
+) -> dict | JSONResponse:
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    if not IDEMPOTENCY_PATTERN.fullmatch(intent_key):
+        return _error(422, "SUBMISSION_INTENT_INVALID", "提交标识无效。")
+    try:
+        return client.get_submission_intent(study_id, intent_key)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+@router.get("/projects/{project_id}/studies/{study_id}/arms/{arm_id}/execution-contract", response_model=None)
+def project_execution_contract(
+    request: Request, project_id: int, study_id: str, arm_id: str, client: ClientDep, user: Viewer,
+) -> dict | JSONResponse:
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    if not IDEMPOTENCY_PATTERN.fullmatch(arm_id):
+        return _error(422, "EXECUTION_ARM_INVALID", "实验臂编号无效。")
+    try:
+        return client.get_execution_contract(study_id, arm_id)
     except AgentGuardError as exc:
         return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
 

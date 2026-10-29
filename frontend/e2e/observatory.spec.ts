@@ -24,6 +24,13 @@ test("five product pages are usable at all required viewport sizes",async({page}
     for(const size of [{width:1920,height:1080},{width:1440,height:900},{width:1366,height:768},{width:1024,height:768},{width:390,height:844}]){
       await page.setViewportSize(size);
       await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+      if(["sandbox","detection","intervention-lab"].includes(route)){
+        await expect.poll(()=>page.locator(".agent-canvas").first().evaluate(canvas=>{
+          const outer=canvas.getBoundingClientRect();
+          const nodes=Array.from(canvas.querySelectorAll(".react-flow__node"));
+          return nodes.length>0&&nodes.every(node=>{const box=node.getBoundingClientRect();return box.left>=outer.left&&box.right<=outer.right&&box.top>=outer.top&&box.bottom<=outer.bottom;});
+        })).toBe(true);
+      }
       await page.screenshot({path:test.info().outputPath(`${route}-${size.width}.png`),fullPage:true});
     }
     if(route==="detection"){

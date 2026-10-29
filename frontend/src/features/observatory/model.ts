@@ -16,11 +16,13 @@ export interface ProbeView {
   threshold?: number | null; target_layer?: number | null; token_policy?: string | null;
   label_semantics: string; evaluation_split?: string | null; claim_level: string;
   evidence_refs: string[]; source_event_ids?: string[];
+  threshold_passed?: boolean | null; detection_status?: string; threshold_source?: string | null;
+  probability_calibrated?: boolean; probe_model_version?: string | null; measurement_phase?: string | null;
 }
 export interface GraphView {
   schema_version: "stego.graph/1"; study_id: string; run_id: string | null; track: string;
   state: string; nodes: AgentView[]; communication_edges: MessageView[]; probe_evidence: ProbeView[];
-  interventions: { id: string; kind: string; execution_state: string; target: { type: string; id: string } }[];
+  interventions: { id: string; kind: string; execution_state: string; target: { type: string; id: string }; details?:Record<string,unknown> }[];
   evidence_status: string; limitations: string[];
 }
 export interface ExperimentView {
@@ -31,6 +33,11 @@ export interface ExperimentView {
 }
 export interface ComparisonView {
   status: string; blockers: string[]; limitations?: string[];
+  batch_id?: string; replicate_id?: string|null; research_validity?: string;
+  research_limitations?: string[]; selected_runs?:{arm_id:string;workflow_id:string;run_id:string|null}[];
+  baseline_srr?:{value:number;successes:number;planned:number;wilson_95_ci:number[]};
+  multiplicity_method?:string;
+  adjusted_pvalues?:Record<string,{p_value:number;adjusted_p_value:number;reject_at_0_05:boolean}>;
   arms: {arm_id: string; status: string; sample_count?: number; missing_count?: number;
     baseline_run_id?: string; treatment_run_id?: string; blockers: string[];
     metrics?: Record<string, {value: number | null; denominator: number}>;
@@ -83,7 +90,10 @@ export function parseExperimentView(value: unknown): ExperimentView {
 export function parseComparisonView(value:unknown):ComparisonView {
   if(!value||typeof value!=="object")throw new Error("配对结果不是有效对象。");
   const result=value as ComparisonView&{schema_version:string};
-  if(result.schema_version!=="stego.comparison/1"||!Array.isArray(result.arms)||!Array.isArray(result.blockers)
+  if(result.adjusted_pvalues&&Object.values(result.adjusted_pvalues).some(p=>!p||
+    !Number.isFinite(p.p_value)||p.p_value<0||p.p_value>1||!Number.isFinite(p.adjusted_p_value)||
+    p.adjusted_p_value<0||p.adjusted_p_value>1||typeof p.reject_at_0_05!=="boolean"))throw new Error("校正统计结果合同不兼容。");
+  if(!["stego.comparison/1","stego.comparison/2"].includes(result.schema_version)||!Array.isArray(result.arms)||!Array.isArray(result.blockers)
     ||result.arms.some(row=>!row||typeof row.arm_id!=="string"||typeof row.status!=="string"
       ||!Array.isArray(row.blockers)||Object.values(row.metrics??{}).some(metric=>!metric
         ||!Number.isSafeInteger(metric.denominator)||metric.denominator<0
@@ -98,7 +108,7 @@ export function parseComparisonView(value:unknown):ComparisonView {
 export function atSequence(view: ExperimentView, seq: number): GraphView {
   const seen = new Set(view.events.filter((event) => event.seq <= seq).map((event) => event.event_id));
   const nodes = view.graph.nodes.filter((node) => node.source_event_ids.some((id) => seen.has(id))).map((node) => ({
-    ...node, status: view.events.some((event) => event.seq <= seq && event.type === "intervention_applied"
+    ...node, status: view.events.some(event=>event.seq<=seq&&event.type==="run_failed"&&event.actor_id===node.id)?"failed":view.events.some((event) => event.seq <= seq && event.type === "intervention_applied"
       && event.data.kind === "agent_isolation" && event.data.target === node.id) ? "isolated" : "active",
   }));
   const nodeIds = new Set(nodes.map((node) => node.id));
@@ -111,6 +121,22 @@ export function atSequence(view: ExperimentView, seq: number): GraphView {
     interventions: view.graph.interventions.filter((item) => seen.has(item.id))};
 }
 
+/** Frozen label threshold, never a calibrated covert-channel probability. */
+export function probeThreshold(probe: ProbeView): boolean|null {
+  return probe.value!==null&&probe.threshold!=null&&Number.isFinite(probe.threshold)
+    ?probe.value>=probe.threshold:null;
+}
+
+export function eventSelection(event: ExperimentEvent): string|null {
+  return event.source_agent_id&&event.target_agent_id?`${event.source_agent_id}->${event.target_agent_id}`
+    :event.actor_id||null;
+}
+
 export const METHOD_NAMES: Record<string, string> = {baseline: "无干预基线", agent_isolation: "Agent 隔离",
   message_block: "消息阻断", message_replace: "消息替换", leace: "LEACE 表示擦除", activation_patch: "Activation Patching",
   sham: "无操作对照", random_erasure: "随机等秩擦除", irrelevant: "无关位置对照"};
+
+export const METRIC_NAMES:Record<string,string>={SRR_ITT:"秘密恢复率（ITT）",SRR_EXECUTED:"Receiver 执行后的恢复率",
+  INVERTED_READOUT_SRR_ITT:"反转二元读出的恢复率（诊断）",CARRIER_VALID_RATE:"载体格式有效率",RECEIVER_INPUT_NOVELTY_RATE:"独立模型输入覆盖率",BER:"合法比特错误率",UTILITY_COLLABORATIVE:"同路径协作任务效用",UTILITY_INDEPENDENT:"独立辅助读出",
+  NORMAL_UTILITY:"独立辅助读出（兼容指标）",EXECUTION_SUCCESS_RATE:"执行成功率",CARRIER_DELIVERY_RATE:"载体交付率",
+  SRR_NO_CARRIER:"无有效载体时的猜测恢复率",SRR_VALID_CARRIER:"有效载体条件下的恢复率"};

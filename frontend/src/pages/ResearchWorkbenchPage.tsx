@@ -216,7 +216,7 @@ export function ResearchWorkbenchPage({embedded = false}: {embedded?: boolean} =
     setLastPayload(payload);
     registerStudy.mutate({ payload, idempotencyKey: submissionKey }, {onSuccess:result=>{
       if(result.submission.status!=="LINKED"||!result.submission.study_id)return;
-      const next=new URLSearchParams(searchParams);next.set("studyId",result.submission.study_id);next.delete("workflowId");setSearchParams(next);
+      const next=new URLSearchParams(searchParams);next.set("studyId",result.submission.study_id);next.delete("workflowId");next.delete("batchId");next.delete("compareWorkflowId");setSearchParams(next);
     }});
   };
 
@@ -250,7 +250,7 @@ export function ResearchWorkbenchPage({embedded = false}: {embedded?: boolean} =
                 setLastPayload(null);
                 const next = new URLSearchParams(searchParams);
                 next.set("projectId", event.target.value);
-                next.delete("studyId");next.delete("workflowId");
+                next.delete("studyId");next.delete("workflowId");next.delete("batchId");next.delete("compareWorkflowId");
                 setSearchParams(next);
               }}
               disabled={availableProjects.length === 0}
@@ -527,7 +527,7 @@ export function ResearchWorkbenchPage({embedded = false}: {embedded?: boolean} =
                     <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-500">
                       <span>{item.track ?? "未指定 Track"} · {item.source.origin_mode.toUpperCase()}</span>
                       {item.study_id && (
-                        <button type="button" onClick={() => {const next=new URLSearchParams(searchParams);next.set("studyId",item.study_id!);next.delete("workflowId");setSearchParams(next);}} className="inline-flex items-center gap-1 text-brand-700 hover:underline">
+                        <button type="button" onClick={() => {const next=new URLSearchParams(searchParams);next.set("studyId",item.study_id!);next.delete("workflowId");next.delete("batchId");next.delete("compareWorkflowId");setSearchParams(next);}} className="inline-flex items-center gap-1 text-brand-700 hover:underline">
                           查看详情 <ArrowUpRight className="h-3 w-3" />
                         </button>
                       )}

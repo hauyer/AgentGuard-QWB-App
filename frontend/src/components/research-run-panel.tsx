@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiGet, apiPost } from "../services/api";
 import { Button } from "./ui/button";
 import { useAuthStore } from "../stores/auth-store";
+import { useSubmissionIntent } from "../hooks/use-submission-intent";
 
 type RunResult = {
   status?: string;
@@ -22,6 +23,8 @@ export function ResearchRunPanel({ projectId, studyId, study }: {
   const role=useAuthStore(state=>state.role);
   const canSubmit=role==="analyst"||role==="operator"||role==="admin";
   const storageKey = `study-run:${projectId}:${studyId}`;
+  const username=useAuthStore(state=>state.username);
+  const batchIntent=useSubmissionIntent(`${username}:${projectId}:${studyId}:batch`);
   const [workflowId, setWorkflowId] = useState(() => localStorage.getItem(storageKey) ?? "");
   const [armId, setArmId] = useState("baseline");
   const arms = Array.isArray(study.arms) ? study.arms as { arm_id: string }[] : [];
@@ -56,12 +59,11 @@ export function ResearchRunPanel({ projectId, studyId, study }: {
   });
   const data = result.data ?? submit.data;
   const batch=useMutation({mutationFn:()=>{
-    const name=`${storageKey}:batch`;const key=localStorage.getItem(name)??crypto.randomUUID();
-    localStorage.setItem(name,key);
-    return apiPost<{manifest_artifact_id:string;items:{arm_id:string;workflow_id:string;submission:{status:string}}[]}>(`/projects/${projectId}/studies/${encodeURIComponent(studyId)}/run-batches`,undefined,{"Idempotency-Key":key});
-  },onSettled:()=>void batches.refetch()});
+    batchIntent.markUncertain();
+    return apiPost<{manifest_artifact_id:string;items:{arm_id:string;workflow_id:string;submission:{status:string}}[]}>(`/projects/${projectId}/studies/${encodeURIComponent(studyId)}/replicate-batches`,{replicate_id:batchIntent.intent.replicate_id},{"Idempotency-Key":batchIntent.intent.key});
+  },onSuccess:()=>batchIntent.markAccepted(),onSettled:()=>void batches.refetch()});
   const batches=useQuery({queryKey:["study-batches",projectId,studyId],
-    queryFn:({signal})=>apiGet<{items:{batch_id:string;manifest_artifact_id:string;items:{arm_id:string;run_id:string|null;submission_status:string}[]}[]}>(`/projects/${projectId}/studies/${encodeURIComponent(studyId)}/run-batches`,signal)});
+    queryFn:({signal})=>apiGet<{items:{batch_id:string;replicate_id?:string;manifest_artifact_id:string;items:{arm_id:string;run_id:string|null;submission_status:string}[]}[]}>(`/projects/${projectId}/studies/${encodeURIComponent(studyId)}/run-batches`,signal)});
   const error = result.error ?? submit.error ?? history.error;
   return <section className="min-w-0 space-y-2 rounded-md border border-surface-border p-3">
     <h3 className="text-sm font-semibold">真实实验运行</h3>
@@ -74,7 +76,10 @@ export function ResearchRunPanel({ projectId, studyId, study }: {
         onClick={() => submit.mutate()}>{submit.isPending ? "提交中…" : "提交实验"}</Button>
       {activeWorkflowId && <Button onClick={() => void result.refetch()}>刷新状态</Button>}
       <Button variant="secondary" disabled={!canSubmit||!arms.length||batch.isPending} onClick={()=>batch.mutate()}>{batch.isPending?"正在登记批次…":"提交全部冻结实验臂"}</Button>
+      <Button variant="secondary" disabled={!canSubmit||batch.isPending||batchIntent.intent.state==="uncertain"} onClick={()=>{batchIntent.newReplicate();batch.reset();}}>新建重复实验</Button>
+      {batchIntent.intent.state==="uncertain"&&<Button variant="secondary" onClick={async()=>{const read=await batches.refetch();if(read.data?.items.some(item=>item.replicate_id===batchIntent.intent.replicate_id))batchIntent.markAccepted();}}>只读对账本次提交</Button>}
     </div>
+    <p className="break-all text-xs">重复编号：{batchIntent.intent.replicate_id} · 提交意图：{batchIntent.intent.state}。重试沿用同一编号；新建重复实验生成新的批次，历史批次保留。</p>
     {error && <p role="alert" className="break-words text-xs text-red-700">{error.message}</p>}
     {batch.error&&<p role="alert">{batch.error.message}。提交结果可能不确定：先查询批次历史；重复提交使用已保存的同一幂等键。</p>}
     <details><summary>已保存批次历史（{batches.data?.items.length??0}）</summary><Button variant="secondary" onClick={()=>void batches.refetch()}>查询批次历史</Button>{batches.data?.items.map(item=><div key={item.batch_id}><p className="break-all">{item.batch_id}</p><p className="break-all">SHA-256：{item.manifest_artifact_id}</p>{item.items.map(arm=><p key={arm.arm_id} className="break-all">{arm.arm_id} · {arm.submission_status} · {arm.run_id??"尚未提交"}</p>)}</div>)}</details>
