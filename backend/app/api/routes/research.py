@@ -24,7 +24,7 @@ from app.services.project_service import ProjectServiceError, require_project_ac
 
 router = APIRouter()
 
-AGENTGUARD_RC5_SOURCE = "4cab48fc22bf7dd6f59b2ba0b2fc0368dfd5ebf0"
+AGENTGUARD_RC5_SOURCE = "834a3d87ad3745663a26822966d206b82ec5f129"
 MAX_STUDY_REQUEST_BYTES = 1024 * 1024
 OperatorCsrf = Annotated[AppUser, Depends(require_role_csrf("operator"))]
 IDEMPOTENCY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
