@@ -24,7 +24,7 @@ from app.services.project_service import ProjectServiceError, require_project_ac
 
 router = APIRouter()
 
-AGENTGUARD_RC5_SOURCE = "39983e6cc526a430f384277e45471089646512ba"
+AGENTGUARD_RC5_SOURCE = "71d5017be4108932a00c56e631c63806d66adeeb"
 MAX_STUDY_REQUEST_BYTES = 1024 * 1024
 IDEMPOTENCY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")

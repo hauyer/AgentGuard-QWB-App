@@ -272,5 +272,3 @@ def test_execution_contract_is_read_only_and_requires_project_ownership(live_pro
     assert calls == [(study_id, "baseline")]
     assert client.get(base.replace(f"projects/{project_id}", "projects/999999")).status_code == 404
     assert calls == [(study_id, "baseline")]
-
-
