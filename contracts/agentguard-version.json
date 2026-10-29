@@ -1,30 +1,29 @@
 {
-  "schema_version": "1.6",
+  "schema_version": "1.7",
   "pinned_agentguard": {
     "repository": "https://github.com/hauyer/AgentGuard",
     "branch": "feature/i-reliability-and-live-validation",
-    "commit": "d85aa97e1566e2c50816f2ade3129235266ec704",
-    "commit_short": "d85aa97",
-    "commit_subject": "feat: freeze research API and audit WARDEN live gate",
-    "api_source_commit": "d85aa97e1566e2c50816f2ade3129235266ec704",
-    "pinned_at": "2026-10-28",
-    "previous_pin": "9d1c1dc9331f4ce168aab29b860c94b9d65a8321 (1.1.0rc4; prior runtime and API source)",
+    "commit": "e69333eca2c4f54c88eb7327c42c0007ac42c3fb",
+    "commit_short": "e69333e",
+    "commit_subject": "fix: report readiness for reviewed frozen S protocols",
+    "api_source_commit": "e69333eca2c4f54c88eb7327c42c0007ac42c3fb",
+    "pinned_at": "2026-10-29",
+    "previous_pin": "033d4f2158fbac75890af3e4fc5a32188261d8ef",
     "upstream_version": "1.1.0rc5",
-    "upstream_branch_head": "c67c7f1f186aeec6d95d6a6c1c0a48bb1a84ea38",
-    "upstream_branch_head_subject": "docs: record rc5 contract and WARDEN live gate",
-    "upstream_branch_head_delta": "One documentation-only commit after the RC5 API implementation snapshot; verified against GitHub compare.",
-    "local_changes": "Working tree on c67c7f1: additive Study run submission and verified result operations; original operations retained."
+    "upstream_branch_head": "38d898695b47d92528f3b64ef5f2b3f19e5c25e7",
+    "upstream_branch_head_subject": "Baseline before local Stego Sandbox work",
+    "upstream_branch_head_delta": "Pinned implementation is a local commit; not pushed. Remote CI remains historical."
   },
   "openapi": {
-    "path_count": 89,
-    "operation_count": 102,
-    "sha256_file": "f7d71c7c44adfe817f8c1bf5efe26175cf15552639ec86668d0f3eae1c6fc619",
-    "sha256_canonical_json": "6fb210a05b46bc313198496744d85da61d945c20fdfe4acd22fa5ebf4c27b533",
+    "path_count": 93,
+    "operation_count": 107,
+    "sha256_file": "e11167fd03940220b0443ee891e80c08081173112729c5c3d8b26571ab54c816",
+    "sha256_canonical_json": "8eb0011f1d38ba38d7a3f95c9ca4ef70fad5e498fe7f47cbd7a097c268d5fa96",
     "canonicalization": "UTF-8 JSON; recursively sorted object keys; compact separators; Unicode unescaped",
     "verified_at": "2026-10-29",
-    "snapshot": "integration-data/agentguard-openapi-local-three-repo.json",
-    "source_commit": "d85aa97e1566e2c50816f2ade3129235266ec704",
-    "verification_method": "local_runtime_additive_extension",
+    "snapshot": "integration-data/agentguard-openapi-stego-sandbox-v1.json",
+    "source_commit": "e69333eca2c4f54c88eb7327c42c0007ac42c3fb",
+    "verification_method": "local_committed_runtime_with_full_legacy_field_equality",
     "live_openapi": "PASS_LOCAL_ONLY",
     "live_observation": {
       "observed_at": "2026-10-28T15:58:33.276356Z",
@@ -50,18 +49,12 @@
   },
   "upstream_ci": {
     "workflow": "AgentGuard CI",
-    "run_id": 40704083443,
-    "run_url": "https://github.com/hauyer/AgentGuard/actions/runs/40704083443",
-    "commit": "c67c7f1f186aeec6d95d6a6c1c0a48bb1a84ea38",
-    "api_source_commit": "d85aa97e1566e2c50816f2ade3129235266ec704",
+    "run_id": 40814257309,
+    "run_url": "https://github.com/hauyer/AgentGuard/actions/runs/40814257309",
+    "commit": "38d898695b47d92528f3b64ef5f2b3f19e5c25e7",
     "conclusion": "success",
-    "jobs": [
-      "test (3.11)",
-      "test (3.12)",
-      "test (3.13)"
-    ],
-    "verified_at": "2026-10-28",
-    "note": "The passing run is on the latest branch head, one documentation-only commit after the pinned RC5 API implementation."
+    "verified_at": "2026-10-29",
+    "note": "Historical baseline only. New local pinned commit has not been pushed or tested by remote CI."
   },
   "api_documentation": {
     "qwb_handoff_contract": "docs/integration/I_QWB_HANDOFF.md",
@@ -117,7 +110,12 @@
     "GET /v1/studies/{study_id}/analyses",
     "POST /v1/studies/{study_id}/runs",
     "GET /v1/studies/{study_id}/runs/{workflow_id}",
-    "GET /v1/studies/{study_id}/runs"
+    "GET /v1/studies/{study_id}/runs",
+    "GET /v1/studies/{study_id}/comparison",
+    "GET /v1/studies/{study_id}/run-batches",
+    "GET /v1/studies/{study_id}/runs/{workflow_id}/timeline",
+    "GET /v1/studies/{study_id}/runs/{workflow_id}/visualization",
+    "POST /v1/studies/{study_id}/run-batches"
   ],
   "unsupported_capabilities": {},
   "contract_assertions": {
@@ -320,7 +318,12 @@
     "live_openapi": "PASS_LOCAL_ONLY: local RC5 OpenAPI exactly equals the pinned parsed snapshot and canonical SHA; raw runtime serialization SHA differs",
     "http_smoke": "PASS_LOCAL_ONLY: direct health/identity/readiness/capabilities plus QWB BFF and Vite-proxy capability GETs; no write requests",
     "warden_live_gate": "BLOCKED",
-    "new_execution_operations_exposed_to_application": false
+    "new_execution_operations_exposed_to_application": false,
+    "stego_sandbox": {
+      "contract": "PASS_LOCAL",
+      "remote_ci": "NOT_RUN_LOCAL_COMMIT",
+      "measured_claim": "controlled observation only"
+    }
   },
   "capability_status": {
     "published_but_not_app_supported": [
@@ -372,8 +375,13 @@
   "openapi_diff": {
     "baseline_snapshot": "integration-data/agentguard-openapi-9d1c1dc.json",
     "added_operations": [
+      "GET /v1/studies/{study_id}/comparison",
+      "GET /v1/studies/{study_id}/run-batches",
       "GET /v1/studies/{study_id}/runs",
       "GET /v1/studies/{study_id}/runs/{workflow_id}",
+      "GET /v1/studies/{study_id}/runs/{workflow_id}/timeline",
+      "GET /v1/studies/{study_id}/runs/{workflow_id}/visualization",
+      "POST /v1/studies/{study_id}/run-batches",
       "POST /v1/studies/{study_id}/runs"
     ],
     "removed_operations": [],
@@ -407,7 +415,18 @@
     "baseline_raw_sha256": "f2b802fd7928bf2701bfbc65e4cf655c8f801a465fe6dd853f938e9d8f75b978",
     "baseline_canonical_sha256": "09b21ab3cd1e95dd3073142e4274b387ffb43689437be3fa60ad0939403f7894",
     "added_schemas": [
-      "StudyRunRequest"
+      "ExperimentEvent",
+      "ExperimentTimeline",
+      "ExperimentVisualization",
+      "GraphNode",
+      "GraphSnapshot",
+      "InterventionOverlay",
+      "InterventionTarget",
+      "MessageEdge",
+      "OptionalMetric",
+      "ProbeEvidence",
+      "StudyRunRequest",
+      "VerifiedViewArtifact"
     ]
   },
   "research_capability_status": {
@@ -597,5 +616,10 @@
       "measured_error_status": "422",
       "measured_error_code": "ARTIFACT_CONTENT_NOT_VERIFIED"
     }
+  },
+  "stego_baseline": {
+    "snapshot": "integration-data/agentguard-openapi-local-three-repo.json",
+    "operation_count": 102,
+    "compatibility": "All original operation bodies and component schemas equal; tested separately."
   }
 }

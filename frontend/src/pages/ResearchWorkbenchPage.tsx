@@ -85,7 +85,7 @@ function pretty(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-export function ResearchWorkbenchPage() {
+export function ResearchWorkbenchPage({embedded = false}: {embedded?: boolean} = {}) {
   const projects = useProjects(200);
   const capabilities = useResearchCapabilities();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -96,7 +96,8 @@ export function ResearchWorkbenchPage() {
     : availableProjects[0]?.project_id ?? 0;
   const studies = useProjectStudies(projectId);
   const registerStudy = useRegisterProjectStudy(projectId);
-  const [selectedStudyId, setSelectedStudyId] = useState<string | null>(null);
+  const [selectedStudyId, setSelectedStudyId] = useState<string | null>(()=>searchParams.get("studyId"));
+  useEffect(()=>setSelectedStudyId(searchParams.get("studyId")),[searchParams]);
   const detail = useProjectStudy(projectId, selectedStudyId);
   const integrity = useProjectStudyIntegrity(projectId, selectedStudyId);
   const analyses = useProjectStudyAnalyses(projectId, selectedStudyId);
@@ -213,7 +214,10 @@ export function ResearchWorkbenchPage() {
 
   const submitPayload = (payload: StudyRegistrationPayload) => {
     setLastPayload(payload);
-    registerStudy.mutate({ payload, idempotencyKey: submissionKey });
+    registerStudy.mutate({ payload, idempotencyKey: submissionKey }, {onSuccess:result=>{
+      if(result.submission.status!=="LINKED"||!result.submission.study_id)return;
+      const next=new URLSearchParams(searchParams);next.set("studyId",result.submission.study_id);next.delete("workflowId");setSearchParams(next);
+    }});
   };
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -229,6 +233,7 @@ export function ResearchWorkbenchPage() {
   return (
     <div className="mx-auto max-w-[1500px] space-y-5">
       <PageHeader
+        level={embedded ? 2 : 1}
         title="研究工作台"
         description="查看 AgentGuard RC5 研究能力，在项目内预注册 Study，并追踪上游记录与证据限制。"
         actions={(
@@ -245,6 +250,7 @@ export function ResearchWorkbenchPage() {
                 setLastPayload(null);
                 const next = new URLSearchParams(searchParams);
                 next.set("projectId", event.target.value);
+                next.delete("studyId");next.delete("workflowId");
                 setSearchParams(next);
               }}
               disabled={availableProjects.length === 0}
@@ -521,7 +527,7 @@ export function ResearchWorkbenchPage() {
                     <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-500">
                       <span>{item.track ?? "未指定 Track"} · {item.source.origin_mode.toUpperCase()}</span>
                       {item.study_id && (
-                        <button type="button" onClick={() => setSelectedStudyId(item.study_id)} className="inline-flex items-center gap-1 text-brand-700 hover:underline">
+                        <button type="button" onClick={() => {const next=new URLSearchParams(searchParams);next.set("studyId",item.study_id!);next.delete("workflowId");setSearchParams(next);}} className="inline-flex items-center gap-1 text-brand-700 hover:underline">
                           查看详情 <ArrowUpRight className="h-3 w-3" />
                         </button>
                       )}

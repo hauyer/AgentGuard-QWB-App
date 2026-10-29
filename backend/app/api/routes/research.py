@@ -24,7 +24,7 @@ from app.services.project_service import ProjectServiceError, require_project_ac
 
 router = APIRouter()
 
-AGENTGUARD_RC5_SOURCE = "d85aa97e1566e2c50816f2ade3129235266ec704"
+AGENTGUARD_RC5_SOURCE = "e69333eca2c4f54c88eb7327c42c0007ac42c3fb"
 MAX_STUDY_REQUEST_BYTES = 1024 * 1024
 IDEMPOTENCY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -557,6 +557,40 @@ def submit_project_study_run(
         return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
 
 
+@router.get("/projects/{project_id}/studies/{study_id}/run-batches", response_model=None)
+def list_project_study_batches(
+    request: Request, project_id: int, study_id: str, client: ClientDep, user: Viewer,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50, offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict | JSONResponse:
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    try:
+        return client.list_study_batches(study_id, limit=limit, offset=offset)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+@router.post("/projects/{project_id}/studies/{study_id}/run-batches", response_model=None)
+def submit_project_study_batch(
+    request: Request, project_id: int, study_id: str, client: ClientDep, user: AnalystCsrf,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
+) -> dict | JSONResponse:
+    try:
+        require_project_access(request.app.state.settings, user, project_id, required_role="analyst")
+    except ProjectServiceError as exc:
+        return _error(exc.status_code, exc.code, str(exc))
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    if not IDEMPOTENCY_PATTERN.fullmatch(idempotency_key):
+        return _error(422, "STUDY_BATCH_INVALID", "批次需要有效幂等键。")
+    try:
+        return client.submit_study_batch(study_id, idempotency_key)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
 @router.get("/projects/{project_id}/studies/{study_id}/runs", response_model=None)
 def list_project_study_runs(
     request: Request, project_id: int, study_id: str, client: ClientDep, user: Viewer,
@@ -580,5 +614,47 @@ def get_project_study_run(
         return error
     try:
         return client.get_study_run(study_id, workflow_id)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+@router.get("/projects/{project_id}/studies/{study_id}/runs/{workflow_id}/visualization", response_model=None)
+def project_visualization(
+    request: Request, project_id: int, study_id: str, workflow_id: str, client: ClientDep,
+    user: Viewer, through_seq: Annotated[int | None, Query(ge=0)] = None,
+) -> dict | JSONResponse:
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    try:
+        return client.get_experiment_view(study_id, workflow_id, "visualization", through_seq=through_seq)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+@router.get("/projects/{project_id}/studies/{study_id}/runs/{workflow_id}/timeline", response_model=None)
+def project_timeline(
+    request: Request, project_id: int, study_id: str, workflow_id: str, client: ClientDep,
+    user: Viewer, after_seq: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> dict | JSONResponse:
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    try:
+        return client.get_experiment_view(study_id, workflow_id, "timeline", after_seq=after_seq, limit=limit)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+@router.get("/projects/{project_id}/studies/{study_id}/comparison", response_model=None)
+def project_comparison(
+    request: Request, project_id: int, study_id: str, client: ClientDep, user: Viewer,
+) -> dict | JSONResponse:
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    try:
+        return client.get_study_comparison(study_id)
     except AgentGuardError as exc:
         return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)

@@ -5,7 +5,7 @@ import { cn } from "../../utils/cn";
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: "bg-brand-600 text-white hover:bg-brand-700 disabled:bg-slate-300",
+  primary: "bg-brand-600 text-white hover:bg-brand-500 disabled:opacity-40",
   secondary: "bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-surface-muted",
   ghost: "text-slate-600 hover:bg-surface-muted",
   danger: "bg-red-600 text-white hover:bg-red-700",

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useResourceSelection } from "../hooks/use-resource-selection";
+import { ResourcePicker } from "../components/shared/resource-picker";
 
 import { useAuthStore } from "../stores/auth-store";
 import { useDefense, useDefenseOutcomes, usePreviewDefense } from "../hooks/use-evidence";
@@ -14,13 +14,10 @@ import { hasRole } from "../utils/roles";
 import type { DefenseCandidate } from "../types/evidence";
 import { cn } from "../utils/cn";
 
-const SAMPLE_REQUEST_IDS = ["inv-qwb-0001", "inv-qwb-0005", "inv-qwb-0002"];
 
 export function DefensePage() {
   const role = useAuthStore((state) => state.role);
-  const [searchParams] = useSearchParams();
-  const initialRequestId = searchParams.get("request_id") ?? SAMPLE_REQUEST_IDS[0];
-  const [requestId, setRequestId] = useState(initialRequestId);
+  const [requestId, setRequestId] = useResourceSelection("request_id");
   const { data, isLoading, error, refetch, isFetching } = useDefense(requestId);
   const { data: outcomesData } = useDefenseOutcomes();
   const preview = usePreviewDefense(requestId);
@@ -36,30 +33,9 @@ export function DefensePage() {
         description="防御候选仅可预览；执行器尚未通过验证。"
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs text-slate-500">调查：</span>
-        <select
-          value={requestId}
-          onChange={(event) => setRequestId(event.target.value)}
-          className="rounded-md border border-surface-border px-2 py-1 text-xs"
-        >
-          {SAMPLE_REQUEST_IDS.map((id) => (
-            <option key={id} value={id}>
-              {id}
-            </option>
-          ))}
-        </select>
-        <PermissionGate required="analyst">
-          <Button
-            variant="secondary"
-            disabled={!canMutate || preview.isPending}
-            onClick={() => preview.mutate()}
-            aria-label="生成或更新候选预览（不执行防御）"
-          >
-            {preview.isPending ? "预览中…" : "生成/更新候选预览"}
-          </Button>
-        </PermissionGate>
-      </div>
+      <ResourcePicker value={requestId} onSelect={setRequestId} kind="investigation"/>
+      <PermissionGate required="analyst"><Button variant="secondary" disabled={!requestId||!canMutate||preview.isPending}
+        onClick={()=>preview.mutate()}>{preview.isPending?"预览中…":"生成/更新候选预览"}</Button></PermissionGate>
 
       {isLoading && <p className="text-sm text-slate-400">正在加载防御候选…</p>}
 

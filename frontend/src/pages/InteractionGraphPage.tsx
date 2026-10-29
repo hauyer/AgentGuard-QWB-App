@@ -179,7 +179,7 @@ function InteractionGraphView() {
       const container = document.querySelector<HTMLElement>(".react-flow__viewport");
       if (!container) throw new Error("图谱画布尚未就绪");
       const dataUrl = await toPng(container, {
-        backgroundColor: "#ffffff",
+        backgroundColor: "#080e19",
         width: 1600,
         height: 1000,
         pixelRatio: 2,
@@ -341,6 +341,7 @@ function InteractionGraphView() {
 
       <div className="h-[560px] overflow-hidden rounded-lg border border-surface-border bg-white shadow-sm">
         <ReactFlow
+          colorMode="dark"
           nodes={nodes}
           edges={edges}
           onEdgeClick={onEdgeClick}

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useResourceSelection } from "../hooks/use-resource-selection";
+import { ResourcePicker } from "../components/shared/resource-picker";
 
 import { useAuthStore } from "../stores/auth-store";
 import { useEvidence } from "../hooks/use-evidence";
@@ -14,13 +14,10 @@ import { VerificationBadge } from "../components/shared/verification-badge";
 import type { EvidenceItem } from "../types/evidence";
 import { cn } from "../utils/cn";
 
-const SAMPLE_REQUEST_IDS = ["inv-qwb-0001", "inv-qwb-0005"];
 
 export function EvidencePage() {
   const role = useAuthStore((state) => state.role);
-  const [searchParams] = useSearchParams();
-  const initialRequestId = searchParams.get("request_id") ?? SAMPLE_REQUEST_IDS[0];
-  const [requestId, setRequestId] = useState(initialRequestId);
+  const [requestId, setRequestId] = useResourceSelection("request_id");
   const { data, isLoading, error, refetch, isFetching } = useEvidence(requestId);
 
   const evidence = data?.evidence;
@@ -33,20 +30,7 @@ export function EvidencePage() {
         description="按来源、证据等级和验证状态浏览。"
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs text-slate-500">调查：</span>
-        <select
-          value={requestId}
-          onChange={(event) => setRequestId(event.target.value)}
-          className="rounded-md border border-surface-border px-2 py-1 text-xs"
-        >
-          {SAMPLE_REQUEST_IDS.map((id) => (
-            <option key={id} value={id}>
-              {id}
-            </option>
-          ))}
-        </select>
-      </div>
+      <ResourcePicker value={requestId} onSelect={setRequestId} kind="investigation"/>
 
       {isLoading && <p className="text-sm text-slate-400">正在加载证据…</p>}
 

@@ -148,3 +148,48 @@ def test_ambiguous_study_post_requires_explicit_same_key_replay(
         assert len(rows) == 1
         assert rows[0].status == "LINKED"
         assert rows[0].study_id == "study-stub-0001"
+
+def test_experiment_views_enforce_project_link_and_forward_bounded_cursor(live_project_env, monkeypatch):
+    client, _, login = live_project_env
+    login()
+    project_id = _project_id(client)
+    created = client.post(f"/api/projects/{project_id}/studies", json=_registration(),
+                          headers={**_csrf(client), "Idempotency-Key": "view-study-1"})
+    assert created.status_code == 201, created.text
+    study_id = created.json()["submission"]["study_id"]
+    seen = []
+
+    def view(self, study, workflow, section, **query):
+        seen.append((study, workflow, section, query))
+        return {"schema_version": "stego.timeline/1", "events": [], "next_seq": 3}
+
+    monkeypatch.setattr(AgentGuardClient, "get_experiment_view", view)
+    base = f"/api/projects/{project_id}/studies/{study_id}/runs/workflow-test"
+    response = client.get(base + "/timeline?after_seq=3&limit=25")
+    assert response.status_code == 200, response.text
+    assert seen[-1][-1] == {"after_seq": 3, "limit": 25}
+    assert client.get(base + "/timeline?after_seq=-1").status_code == 422
+    assert client.get(base + "/timeline?limit=201").status_code == 422
+    count = len(seen)
+    unlinked = f"/api/projects/{project_id}/studies/unlinked/runs/workflow-test/visualization"
+    assert client.get(unlinked).status_code == 404
+    assert client.get(f"/api/projects/999999/studies/{study_id}/runs/workflow-test/visualization").status_code == 404
+    assert len(seen) == count
+
+
+def test_batch_requires_csrf_and_uses_operator_client(live_project_env, monkeypatch):
+    client, _, login = live_project_env
+    login()
+    project_id = _project_id(client)
+    created = client.post(f"/api/projects/{project_id}/studies", json=_registration(),
+                          headers={**_csrf(client), "Idempotency-Key": "batch-study-1"})
+    study_id = created.json()["submission"]["study_id"]
+    seen = []
+    monkeypatch.setattr(AgentGuardClient, "submit_study_batch", lambda self, study, key:
+                        (seen.append((study, key)), {"schema_version": "stego.batch/1", "items": []})[1])
+    url = f"/api/projects/{project_id}/studies/{study_id}/run-batches"
+    assert client.post(url, headers={"Idempotency-Key": "batch-key"}).status_code == 403
+    assert seen == []
+    response = client.post(url, headers={**_csrf(client), "Idempotency-Key": "batch-key"})
+    assert response.status_code == 200, response.text
+    assert seen == [(study_id, "batch-key")]

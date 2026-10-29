@@ -19,7 +19,7 @@ SPEC.loader.exec_module(contract_check)
 
 def test_checked_in_snapshot_matches_the_pin() -> None:
     openapi = contract_check.validate_snapshot()
-    assert len(openapi["paths"]) == 89
+    assert len(openapi["paths"]) == 93
     operations = contract_check._operations(openapi)
     assert "POST /v1/investigation-loops" in operations
     assert "GET /v1/research/strategy-evaluations" in operations
@@ -30,6 +30,21 @@ def test_checked_in_snapshot_matches_the_pin() -> None:
     assert "GET /v1/system/identity" not in contract["supported_endpoints"]
     assert "POST /v1/investigation-loops/{loop_id}/reconcile" not in contract["supported_endpoints"]
     contract_check._validate_live_shapes(openapi, contract_check.load_contract())
+
+
+def test_stego_extension_preserves_every_frozen_operation_and_schema() -> None:
+    contract = contract_check.load_contract()
+    current = contract_check.validate_snapshot(contract)
+    baseline = json.loads((REPO_ROOT / contract["stego_baseline"]["snapshot"]).read_text(encoding="utf-8"))
+    assert len(contract_check._operations(baseline)) == 102
+    for path, methods in baseline["paths"].items():
+        for method, operation in methods.items():
+            assert current["paths"][path][method] == operation, f"Changed: {method} {path}"
+    for name, schema in baseline["components"]["schemas"].items():
+        assert current["components"]["schemas"][name] == schema, f"Changed schema: {name}"
+    pin = contract["pinned_agentguard"]
+    assert pin["commit"] == pin["api_source_commit"] == contract["openapi"]["source_commit"]
+    assert "local_changes" not in pin
 
 
 def test_rc5_diff_matches_retained_rc4_snapshot() -> None:

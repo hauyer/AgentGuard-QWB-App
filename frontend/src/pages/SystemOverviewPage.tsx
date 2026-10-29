@@ -17,7 +17,7 @@ export function SystemOverviewPage() {
   if (isPending) {
     return (
       <div className="space-y-4">
-        <PageHeader title="系统总览" description="当前系统运行状态与安全调查概况" />
+        <PageHeader title="系统与诊断" description="查看服务连接、运行资源、依赖检查与权限设置。" />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {[0, 1, 2].map((i) => (
             <Card key={i} title="…">
@@ -32,7 +32,7 @@ export function SystemOverviewPage() {
   if (isError || !data) {
     return (
       <div className="space-y-4">
-        <PageHeader title="系统总览" description="当前系统运行状态与安全调查概况" />
+        <PageHeader title="系统与诊断" description="查看服务连接、运行资源、依赖检查与权限设置。" />
         <ErrorState
           kind="backend"
           message={error instanceof Error ? error.message : "无法读取系统状态"}
@@ -47,7 +47,7 @@ export function SystemOverviewPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="系统总览" description="当前系统运行状态与安全调查概况" />
+      <PageHeader title="系统与诊断" description="查看服务连接、运行资源、依赖检查与权限设置。" />
       <DemoBanner meta={meta} />
 
       <Card title="依赖状态">
@@ -86,6 +86,7 @@ export function SystemOverviewPage() {
         </div>
       </Card>
 
+      <details className="system-audit-history"><summary>通用审计历史概况 · 调查、证据与策略统计</summary><p className="mt-3 text-xs text-slate-500">以下来自通用审计索引；研究的真实通信与配对效果请在结果分析台核验。</p><div className="space-y-4 pt-4">
       {/* 调查概况 */}
       <Card title="调查概况" description={sampleNote(data.investigation_summary.sample_based, "最近 200 条样本")}>
         <MetricStrip
@@ -103,7 +104,7 @@ export function SystemOverviewPage() {
           <p className="mt-2 text-xs text-red-700">{data.investigation_summary.error}</p>
         )}
         {data.investigation_summary.recent_request_id && (
-          <p className="mt-2 font-mono text-[11px] text-slate-500">
+          <p className="mt-2 break-all font-mono text-[11px] text-slate-500">
             最近一次调查：{data.investigation_summary.recent_request_id}（{data.investigation_summary.recent_status}）
           </p>
         )}
@@ -165,6 +166,8 @@ export function SystemOverviewPage() {
         />
         {data.policy_summary.error && <p className="mt-2 text-xs text-red-700">{data.policy_summary.error}</p>}
       </Card>
+
+      </div></details>
 
       {/* 审计能力与依赖阻塞 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

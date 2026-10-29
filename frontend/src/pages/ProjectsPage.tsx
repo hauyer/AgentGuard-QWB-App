@@ -66,7 +66,7 @@ export function ProjectsPage() {
       {showCreate && canManage && <CreateProjectForm onDone={() => setShowCreate(false)} />}
 
       {projects.isPending ? (
-        <PageHeader title="项目列表" description="加载中…" />
+        <PageHeader level={2} title="项目列表" description="加载中…" />
       ) : projects.isError ? (
         <ErrorState
           title="项目列表加载失败"
@@ -137,6 +137,7 @@ function ProjectCard({ project, selected }: { project: Project; selected: boolea
       }
     >
       {project.description && <p className="mb-2 text-xs text-slate-600">{project.description}</p>}
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500"><span>项目 #{project.project_id}</span><Link to={`/research?projectId=${project.project_id}`} className="text-brand-700 hover:underline">进入研究与实验 →</Link></div>
 
       {expanded && (
         <div className="space-y-3 text-xs">

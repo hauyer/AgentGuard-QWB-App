@@ -1,3 +1,5 @@
+import { useResourceSelection } from "../hooks/use-resource-selection";
+import { ResourcePicker } from "../components/shared/resource-picker";
 import { useState } from "react";
 
 import { useAuthStore } from "../stores/auth-store";
@@ -12,11 +14,10 @@ import { DemoBanner } from "../components/shared/demo-banner";
 import { EvidenceLevelBadge } from "../components/shared/evidence-level-badge";
 import { VerificationBadge } from "../components/shared/verification-badge";
 
-const SAMPLE_RUNS = ["run-qwb-0001"];
 
 export function ReportsPage() {
   const role = useAuthStore((state) => state.role);
-  const [runId, setRunId] = useState(SAMPLE_RUNS[0]);
+  const [runId, setRunId] = useResourceSelection("run_id");
   const { data, isLoading, error, refetch, isFetching } = useReport(runId);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
@@ -39,19 +40,8 @@ export function ReportsPage() {
         description="调查报告、证据摘要与可下载文件。"
       />
 
+      <ResourcePicker value={runId} onSelect={setRunId} kind="run"/>
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs text-slate-500">运行：</span>
-        <select
-          value={runId}
-          onChange={(event) => setRunId(event.target.value)}
-          className="rounded-md border border-surface-border px-2 py-1 text-xs"
-        >
-          {SAMPLE_RUNS.map((id) => (
-            <option key={id} value={id}>
-              {id}
-            </option>
-          ))}
-        </select>
         <Button variant="secondary" onClick={() => void onJson()} disabled={!report}>
           下载 JSON
         </Button>

@@ -62,7 +62,8 @@ test("login, project investigation, verified loop, evidence, evaluation, exports
   await login(page, "user-a", "user-a-e2e-password", true);
 
   const projectA = await createProjectAndLink(page, "J7 User A Project", "inv-stub-0001");
-  await page.getByRole("link", { name: "研究工作台" }).click();
+  await page.getByRole("link", { name: "研究管理", exact: true }).click();
+  await page.getByText("研究工作台 · 预注册与高级配置", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "研究工作台" })).toBeVisible();
   for (const viewport of [
     { width: 1440, height: 900 },

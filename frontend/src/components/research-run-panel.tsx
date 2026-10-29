@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiGet, apiPost } from "../services/api";
 import { Button } from "./ui/button";
+import { useAuthStore } from "../stores/auth-store";
 
 type RunResult = {
   status?: string;
@@ -18,6 +19,8 @@ type RunResult = {
 export function ResearchRunPanel({ projectId, studyId, study }: {
   projectId: number; studyId: string; study: Record<string, unknown>;
 }) {
+  const role=useAuthStore(state=>state.role);
+  const canSubmit=role==="analyst"||role==="operator"||role==="admin";
   const storageKey = `study-run:${projectId}:${studyId}`;
   const [workflowId, setWorkflowId] = useState(() => localStorage.getItem(storageKey) ?? "");
   const [armId, setArmId] = useState("baseline");
@@ -52,6 +55,13 @@ export function ResearchRunPanel({ projectId, studyId, study }: {
     },
   });
   const data = result.data ?? submit.data;
+  const batch=useMutation({mutationFn:()=>{
+    const name=`${storageKey}:batch`;const key=localStorage.getItem(name)??crypto.randomUUID();
+    localStorage.setItem(name,key);
+    return apiPost<{manifest_artifact_id:string;items:{arm_id:string;workflow_id:string;submission:{status:string}}[]}>(`/projects/${projectId}/studies/${encodeURIComponent(studyId)}/run-batches`,undefined,{"Idempotency-Key":key});
+  },onSettled:()=>void batches.refetch()});
+  const batches=useQuery({queryKey:["study-batches",projectId,studyId],
+    queryFn:({signal})=>apiGet<{items:{batch_id:string;manifest_artifact_id:string;items:{arm_id:string;run_id:string|null;submission_status:string}[]}[]}>(`/projects/${projectId}/studies/${encodeURIComponent(studyId)}/run-batches`,signal)});
   const error = result.error ?? submit.error ?? history.error;
   return <section className="min-w-0 space-y-2 rounded-md border border-surface-border p-3">
     <h3 className="text-sm font-semibold">真实实验运行</h3>
@@ -60,11 +70,15 @@ export function ResearchRunPanel({ projectId, studyId, study }: {
         className="max-w-full rounded border p-1" disabled={submit.isPending || Boolean(workflowId)}>
         {arms.map((arm) => <option key={arm.arm_id} value={arm.arm_id}>{arm.arm_id}</option>)}
       </select>
-      <Button disabled={!arms.length || submit.isPending || Boolean(workflowId)}
+      <Button disabled={!canSubmit || !arms.length || submit.isPending || Boolean(workflowId)}
         onClick={() => submit.mutate()}>{submit.isPending ? "提交中…" : "提交实验"}</Button>
       {activeWorkflowId && <Button onClick={() => void result.refetch()}>刷新状态</Button>}
+      <Button variant="secondary" disabled={!canSubmit||!arms.length||batch.isPending} onClick={()=>batch.mutate()}>{batch.isPending?"正在登记批次…":"提交全部冻结实验臂"}</Button>
     </div>
     {error && <p role="alert" className="break-words text-xs text-red-700">{error.message}</p>}
+    {batch.error&&<p role="alert">{batch.error.message}。提交结果可能不确定：先查询批次历史；重复提交使用已保存的同一幂等键。</p>}
+    <details><summary>已保存批次历史（{batches.data?.items.length??0}）</summary><Button variant="secondary" onClick={()=>void batches.refetch()}>查询批次历史</Button>{batches.data?.items.map(item=><div key={item.batch_id}><p className="break-all">{item.batch_id}</p><p className="break-all">SHA-256：{item.manifest_artifact_id}</p>{item.items.map(arm=><p key={arm.arm_id} className="break-all">{arm.arm_id} · {arm.submission_status} · {arm.run_id??"尚未提交"}</p>)}</div>)}</details>
+    {batch.data&&<details><summary>批次清单已保存 · {batch.data.items.length} 个实验臂</summary><p className="break-all">工件：{batch.data.manifest_artifact_id}</p>{batch.data.items.map(item=><p key={item.arm_id} className="break-all">{item.arm_id} · {item.submission.status} · {item.workflow_id}</p>)}</details>}
     {!data && <p className="text-xs text-slate-500">尚未产生运行结果。</p>}
     {data && <div className="space-y-1 break-all text-xs">
       <p>状态：{data.run?.status ?? data.status ?? "unknown"}</p>

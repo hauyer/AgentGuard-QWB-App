@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useResourceSelection } from "../hooks/use-resource-selection";
+import { ResourcePicker } from "../components/shared/resource-picker";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "../components/ui/badge";
@@ -10,7 +10,6 @@ import { DemoBanner } from "../components/shared/demo-banner";
 
 import type { MetaInfo } from "../types/dashboard";
 
-const SAMPLE_RUN_IDS = ["run-qwb-0001"];
 
 interface Hypothesis {
   hypothesis_id: string;
@@ -35,11 +34,10 @@ async function fetchHypotheses(runId: string, signal?: AbortSignal): Promise<Hyp
 }
 
 export function HypothesesPage() {
-  const [searchParams] = useSearchParams();
-  const initialRunId = searchParams.get("run_id") ?? SAMPLE_RUN_IDS[0];
-  const [runId, setRunId] = useState(initialRunId);
+  const [runId, setRunId] = useResourceSelection("run_id");
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["hypotheses", runId],
+    enabled: Boolean(runId),
     queryFn: ({ signal }) => fetchHypotheses(runId, signal),
   });
 
@@ -53,20 +51,7 @@ export function HypothesesPage() {
         description="查看每项风险的支持证据、反对证据与待验证条件。"
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs text-slate-500">运行：</span>
-        <select
-          value={runId}
-          onChange={(event) => setRunId(event.target.value)}
-          className="rounded-md border border-surface-border px-2 py-1 text-xs"
-        >
-          {SAMPLE_RUN_IDS.map((id) => (
-            <option key={id} value={id}>
-              {id}
-            </option>
-          ))}
-        </select>
-      </div>
+      <ResourcePicker value={runId} onSelect={setRunId} kind="run"/>
 
       {isLoading && <p className="text-sm text-slate-400">正在加载调查假设…</p>}
 

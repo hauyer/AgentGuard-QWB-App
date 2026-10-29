@@ -1,12 +1,11 @@
 """Unified AgentGuard API client (BFF connector).
 
-Contract baseline (RC5): AgentGuard implementation and API source commit
-d85aa97e1566e2c50816f2ade3129235266ec704 (1.1.0rc5; 87 OpenAPI paths). RC5
-preserves the App's previous 33 operations and adds project-scoped Study reads and
-registration through the BFF. Study registration uses RC5's optional upstream
-Idempotency-Key. Analysis writes and WARDEN execution remain blocked because source
-artifacts and real execution are not verified. Capability discovery guards tracked
-operations so older pins degrade explicitly.
+The exact committed implementation and snapshot are pinned in
+contracts/agentguard-version.json (RC5 API version, 93 paths, 107 operations).
+Study execution and arm batches use only frozen public WARDEN workflows. Result
+views require verified artifacts; a healthy service does not prove measured effects.
+Capability discovery lets older servers degrade explicitly. The original measured
+analysis write gate remains independent of the verified read-only paired views.
 
 Safety rules enforced here (mirror the upstream SDK contract):
   * upstream origin is fixed by server config; callers cannot choose arbitrary hosts
@@ -142,10 +141,13 @@ class AgentGuardClient:
         operator: bool = False,
         loop_idempotency_key: str | None = None,
         idempotency_key: str | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         if not path.startswith("/v1/") or "?" in path or "#" in path:
             raise ValueError("path must be a versioned AgentGuard /v1 path")
         method = method.upper()
+        if timeout_seconds is not None and not 0 < timeout_seconds <= 120:
+            raise ValueError("request timeout must be in (0, 120]")
         if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
             raise ValueError("unsupported HTTP method")
 
@@ -177,7 +179,8 @@ class AgentGuardClient:
         while True:
             attempt += 1
             try:
-                return self._perform(method, path, headers=headers, params=params, json_body=json_body)
+                return self._perform(method, path, headers=headers, params=params, json_body=json_body,
+                                     timeout_seconds=timeout_seconds)
             except (AgentGuardUnavailable, _TransientStatus) as exc:
                 if not retryable or attempt > GET_RETRY_ATTEMPTS:
                     raise
@@ -196,10 +199,12 @@ class AgentGuardClient:
         headers: dict[str, str],
         params: dict[str, Any],
         json_body: dict[str, Any] | None,
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         request_id = headers["X-Request-ID"]
         try:
-            with self._http.stream(method, path, headers=headers, params=params, json=json_body) as response:
+            with self._http.stream(method, path, headers=headers, params=params, json=json_body,
+                                   timeout=timeout_seconds or self._timeout) as response:
                 response_request_id = _safe_request_id(response.headers.get("X-Request-ID")) or request_id
                 if 300 <= response.status_code < 400:
                     raise AgentGuardError(
@@ -468,8 +473,26 @@ class AgentGuardClient:
     def list_study_runs(self, study_id: str) -> dict[str, Any]:
         return self.request("GET", f"/v1/studies/{_quote(study_id)}/runs")
 
+    def submit_study_batch(self, study_id: str, key: str) -> dict[str, Any]:
+        return self.request("POST", f"/v1/studies/{_quote(study_id)}/run-batches",
+                            operator=True, idempotency_key=key, timeout_seconds=120)
+
+    def list_study_batches(self, study_id: str, *, limit=50, offset=0) -> dict[str, Any]:
+        return self.request("GET", f"/v1/studies/{_quote(study_id)}/run-batches",
+                            query={"limit": limit, "offset": offset})
+
     def get_study_run(self, study_id: str, workflow_id: str) -> dict[str, Any]:
         return self.request("GET", f"/v1/studies/{_quote(study_id)}/runs/{_quote(workflow_id)}")
+
+    def get_experiment_view(self, study_id: str, workflow_id: str, section: str,
+                            **query) -> dict[str, Any]:
+        if section not in {"visualization", "timeline"}:
+            raise ValueError("Unknown experiment view")
+        return self.request("GET",
+            f"/v1/studies/{_quote(study_id)}/runs/{_quote(workflow_id)}/{section}", query=query)
+
+    def get_study_comparison(self, study_id: str) -> dict[str, Any]:
+        return self.request("GET", f"/v1/studies/{_quote(study_id)}/comparison")
 
     def get_study_integrity(self, study_id: str) -> dict[str, Any]:
         return self.request("GET", f"/v1/studies/{_quote(study_id)}/integrity")

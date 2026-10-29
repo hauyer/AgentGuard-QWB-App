@@ -3,22 +3,37 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
-  --color-brand-50: #f0f5ff;
-  --color-brand-100: #e0ebff;
-  --color-brand-500: #2563eb;
-  --color-brand-600: #1d4ed8;
-  --color-brand-700: #1e40af;
-  --color-brand-900: #0f2a63;
-  --color-brand-950: #0a1a3f;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f5f7fa;
-  --color-surface-border: #d7dde6;
+  color-scheme: dark;
+  --color-brand-50: #153047;
+  --color-brand-100: #24435d;
+  --color-brand-500: #438edc;
+  --color-brand-600: #2862b2;
+  --color-brand-700: #78c8f0;
+  --color-brand-900: #173752;
+  --color-brand-950: #0c1a2f;
+  --color-surface: #101d2e;
+  --color-surface-muted: #080e19;
+  --color-surface-border: #26384b;
   --color-ok: #16a34a;
   --color-warn: #d97706;
   --color-danger: #dc2626;
   --color-info: #2563eb;
   --color-neutral: #6b7280;
+  --color-brand-50-rgb: 21 48 71;
+  --color-brand-100-rgb: 36 67 93;
+  --color-brand-500-rgb: 67 142 220;
+  --color-brand-600-rgb: 40 98 178;
+  --color-brand-700-rgb: 120 200 240;
+  --color-brand-900-rgb: 23 55 82;
+  --color-brand-950-rgb: 12 26 47;
+  --color-surface-rgb: 16 29 46;
+  --color-surface-muted-rgb: 8 14 25;
+  --color-surface-border-rgb: 38 56 75;
+  --color-ok-rgb: 22 163 74;
+  --color-warn-rgb: 217 119 6;
+  --color-danger-rgb: 220 38 38;
+  --color-info-rgb: 37 99 235;
+  --color-neutral-rgb: 107 114 128;
 }
 
 @layer base {
@@ -29,13 +44,16 @@
   }
   body {
     @apply bg-surface-muted text-slate-800 antialiased;
+    margin: 0;
+    font-family: Inter, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
   }
+  input, select, textarea { background-color: var(--color-surface); color: #e7f0fb; }
   :focus-visible {
     outline: 2px solid var(--color-brand-500);
     outline-offset: 2px;
   }
   ::selection {
     background: var(--color-brand-100);
-    color: var(--color-brand-950);
+    color: #f0f6ff;
   }
 }

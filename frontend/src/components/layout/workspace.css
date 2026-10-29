@@ -1,0 +1,71 @@
+.workspace-shell { font-size: 13px; }
+.workspace-shell .stego-main { min-width: 0; width: 0; flex: 1; }
+.workspace-shell .stego-sidebar { height: 100dvh; padding: 0 12px; }
+.workspace-shell .stego-brand { flex-shrink: 0; }
+.workspace-shell .workspace-navigation { min-height: 0; flex: 1; overflow-y: auto; padding-bottom: 18px; scrollbar-width: thin; }
+.workspace-shell .workspace-navigation .nav-label { margin-top: 22px; }
+.workspace-shell .workspace-navigation a { min-height: 40px; }
+.workspace-shell .workspace-navigation a > span { flex: 1; }
+.workspace-shell .sidebar-note { position: static; flex-shrink: 0; margin-top: 0; padding: 16px 9px; }
+.workspace-shell .stego-topbar { position: sticky; top: 0; z-index: 20; min-height: 64px; height: auto; padding-block: 12px; gap: 12px; background: #0c1525f5; backdrop-filter: blur(12px); }
+.workspace-shell .breadcrumb { min-width: 0; }
+.workspace-shell .breadcrumb strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-shell .top-context { margin-left: auto; flex-shrink: 0; }
+.workspace-shell .stego-content { width: 100%; flex: 1; padding: 24px 28px; }
+.workspace-shell .management-content { font-size: 13px; overflow-wrap: anywhere; }
+.workspace-shell .management-content > div { min-width: 0; }
+.workspace-shell .management-content a:not([class*="button"]) { color: var(--color-brand-700); }
+.workspace-shell .management-content input,
+.workspace-shell .management-content select,
+.workspace-shell .management-content textarea { color: var(--ink); background-color: var(--panel2); border-color: var(--line); }
+.workspace-shell .workspace-tools { margin: 18px 0 0; border-top: 1px solid var(--line); padding-top: 12px; }
+.workspace-shell .workspace-tools > summary { padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: var(--muted); font-size: 11px; list-style: none; }
+.workspace-shell .workspace-tools[open] > summary svg { transform: rotate(90deg); }
+.workspace-shell .workspace-provenance { border-left: 2px solid #a68e52; background: #1b2030; padding: 8px 12px; margin-bottom: 20px; border-radius: 3px; color: #b9b8ac; font-size: 11px; }
+.workspace-shell .workspace-provenance summary { cursor: pointer; }
+.workspace-shell .workspace-provenance p { margin: 8px 0 0; line-height: 1.8; }
+.workspace-shell .workspace-section-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.workspace-shell .workspace-section-tabs a { padding: 7px 12px; color: var(--muted); border: 1px solid transparent; border-radius: 4px; }
+.workspace-shell .workspace-section-tabs a.active { color: var(--cyan); background: var(--panel2); border-color: var(--line); }
+.workspace-shell .system-audit-history { padding: 14px 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.workspace-shell .system-audit-history > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.workspace-shell .source-badge.pending { color: var(--muted); background: var(--panel); border-color: var(--line); }
+.workspace-shell .source-badge.unavailable { color: var(--coral); background: #321e29; border-color: #67414f; }
+.workspace-shell .status-dot.is-failed { background: var(--coral); }
+.workspace-shell .status-dot.is-pending { background: var(--amber); }
+.workspace-shell .status-dot.is-unknown { background: var(--muted); }
+.workspace-shell .sidebar-close { display: none; }
+.workspace-shell .skip-to-content { position: fixed; left: 240px; top: -100px; z-index: 100; padding: 10px 20px; background: #1a4153; color: white; }
+.workspace-shell .skip-to-content:focus { top: 10px; }
+.workspace-shell .resource-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.workspace-shell .resource-picker label { flex: 1; min-width: 190px; color: var(--muted); font-size: 12px; }
+.workspace-shell .resource-picker input { display: block; width: 100%; margin-top: 7px; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--line); background: var(--panel2); color: var(--ink); }
+.workspace-shell .resource-picker p { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 12px; }
+.workspace-shell .resource-empty { padding: 26px; border: 1px dashed var(--line); border-radius: 6px; color: var(--muted); }
+.workspace-shell .resource-empty a { color: var(--cyan); }
+.workspace-shell .inspector-scrim { position: fixed; inset: 0; z-index: 44; background: #030812b8; border: 0; }
+.workspace-shell .graph-coordinate,
+.workspace-shell .graph-bottom-note,
+.workspace-shell .graph-toolbar .segmented button,
+.workspace-shell .canvas-legend { font-size: 11px; }
+.workspace-shell .timeline-panel .event-strip button { font-size: 11px; }
+.workspace-error-screen { min-height: 100vh; display: grid; place-items: center; background: #080e19; color: #e7f0fb; padding: 24px; }
+.workspace-error-screen > section { width: min(620px, 100%); padding: 32px; border: 1px solid #26384b; border-radius: 8px; background: #101d2e; }
+@media(max-width:1100px) { .workspace-shell .stego-content { padding: 22px 20px; } }
+@media(max-width:760px) {
+  .workspace-shell .stego-topbar { min-height: 58px; flex-wrap: wrap; padding: 10px 13px; gap: 8px; }
+  .workspace-shell .breadcrumb > span, .workspace-shell .breadcrumb > svg { display: none; }
+  .workspace-shell .breadcrumb { max-width: 120px; font-size: 12px; }
+  .workspace-shell .top-context { gap: 8px; }
+  .workspace-shell .source-badge { font-size: 9px; max-width: 105px; }
+  .workspace-shell .stego-content { padding: 20px 13px; }
+  .workspace-shell .sidebar-close { display: flex; position: absolute; right: 10px; top: 55px; z-index: 3; background: var(--panel2); }
+  .workspace-shell .skip-to-content { left: 15px; }
+  .workspace-shell .stego-footer { font-size: 10px; }
+  .workspace-shell .desk-title p { font-size: 12px; }
+  .workspace-shell .method-list button { font-size: 12px; }
+  .workspace-shell .method-list button small { font-size: 10px; }
+  .workspace-shell .graph-search { width: 95px; }
+  .workspace-shell .graph-toolbar { flex-wrap: wrap; min-height: 52px; height: auto; padding-block: 7px; }
+  .workspace-shell .context-inspector.drawer-open { z-index: 50; }
+}

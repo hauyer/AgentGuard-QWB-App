@@ -227,9 +227,9 @@ describe("AppLayout navigation", () => {
       </QueryClientProvider>,
     );
     const nav = screen.getByRole("navigation");
-    expect(within(nav).getByText("系统总览")).toBeInTheDocument();
+    expect(within(nav).getByText("系统与诊断")).toBeInTheDocument();
     expect(within(nav).getByText("安全调查")).toBeInTheDocument();
-    expect(within(nav).getByText("研究工作台")).toBeInTheDocument();
+    expect(within(nav).getByText("研究管理")).toBeInTheDocument();
     expect(within(nav).getByText("交互图谱")).toBeInTheDocument();
     expect(within(nav).getByText("证据分析")).toBeInTheDocument();
     expect(within(nav).getByText("定向防御")).toBeInTheDocument();

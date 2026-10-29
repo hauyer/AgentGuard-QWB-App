@@ -1,4 +1,6 @@
+import { HomeRedirect, NotFoundPage, WorkspaceErrorPanel } from "../pages/WorkspaceFallbackPages";
 import { createBrowserRouter } from "react-router-dom";
+import { ObservatoryPage } from "../pages/ObservatoryPage";
 
 import { AppLayout } from "../components/layout/AppLayout";
 import { CreateInvestigationPage } from "../pages/CreateInvestigationPage";
@@ -17,7 +19,6 @@ import { InvestigationsListPage } from "../pages/InvestigationsListPage";
 import { MultiRoundReportPage } from "../pages/MultiRoundReportPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { ReportsPage } from "../pages/ReportsPage";
-import { ResearchWorkbenchPage } from "../pages/ResearchWorkbenchPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { SystemOverviewPage } from "../pages/SystemOverviewPage";
 import { StrategyComparisonPage } from "../pages/StrategyComparisonPage";
@@ -27,7 +28,13 @@ export const router = createBrowserRouter([
     path: "/",
     element: <AppLayout />,
     children: [
-      { index: true, element: <SystemOverviewPage />, handle: { title: "系统总览" } },
+      { index: true, element: <HomeRedirect/> },
+      {path:"sandbox",element:<ObservatoryPage desk="home"/>,handle:{title:"总控台"}},
+      {path:"detection",element:<ObservatoryPage desk="detection"/>,handle:{title:"通信检测台"}},
+      {path:"intervention-lab",element:<ObservatoryPage desk="intervention"/>,handle:{title:"干预实验台"}},
+      {path:"analysis",element:<ObservatoryPage desk="analysis"/>,handle:{title:"结果分析台"}},
+      {path:"research",element:<ObservatoryPage desk="research"/>,handle:{title:"研究管理"}},
+      {path:"system-overview",element:<SystemOverviewPage/>,handle:{title:"系统与诊断"}},
       { path: "demo", element: <DemoCenterPage />, handle: { title: "演示导览" } },
       { path: "investigations", element: <InvestigationsListPage />, handle: { title: "安全调查" } },
       { path: "projects", element: <ProjectsPage />, handle: { title: "项目管理" } },
@@ -40,13 +47,13 @@ export const router = createBrowserRouter([
       { path: "hypotheses", element: <HypothesesPage />, handle: { title: "调查假设" } },
       { path: "investigation-journal", element: <InvestigationJournalPage />, handle: { title: "多轮工作台" } },
       { path: "defenses", element: <DefensePage />, handle: { title: "定向防御" } },
-      { path: "research", element: <ResearchWorkbenchPage />, handle: { title: "研究工作台" } },
       { path: "experiments", element: <ExperimentsPage />, handle: { title: "实验对比" } },
       { path: "strategy-comparison", element: <StrategyComparisonPage />, handle: { title: "策略评价" } },
       { path: "experiences", element: <ExperiencesPage />, handle: { title: "经验中心" } },
       { path: "reports", element: <ReportsPage />, handle: { title: "报告中心" } },
       { path: "multi-round-report", element: <MultiRoundReportPage />, handle: { title: "多轮报告" } },
+      {path:"*",element:<NotFoundPage/>,handle:{title:"页面不存在"}},
       { path: "settings", element: <SettingsPage />, handle: { title: "系统设置" } },
-    ],
+    ].map(route=>({...route,errorElement:<WorkspaceErrorPanel/>})),
   },
 ]);
