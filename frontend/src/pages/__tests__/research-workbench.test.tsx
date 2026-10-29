@@ -77,7 +77,8 @@ describe("ResearchWorkbenchPage", () => {
     expect(screen.getAllByText("SYNTHETIC").length).toBeGreaterThan(0);
     expect(screen.getByText("WARDEN_LIVE_GATE_BLOCKED")).toBeInTheDocument();
     expect(screen.getByText("此项目还没有 Study")).toBeInTheDocument();
-    expect(screen.getByText("执行与分析门控仍关闭")).toBeInTheDocument();
+    expect(screen.getByText("结果验收范围")).toBeInTheDocument();
+    expect(screen.getByText(/缺少配对结果时分析保持不完整/)).toBeInTheDocument();
     expect(screen.queryByText("study-stub-0001")).not.toBeInTheDocument();
   });
 

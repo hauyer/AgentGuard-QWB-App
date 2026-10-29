@@ -104,6 +104,16 @@ def test_study_registration_is_project_scoped_and_idempotent(live_project_env) -
     )
     assert cross_project.status_code == 404
     assert cross_project.json()["detail"]["error"] == "STUDY_NOT_FOUND"
+    for suffix in ("/runs", "/runs/known-workflow"):
+        denied = client.get(
+            f"/api/projects/{other_project_id}/studies/{item['study_id']}{suffix}"
+        )
+        assert denied.status_code == 404
+    denied_submit = client.post(
+        f"/api/projects/{other_project_id}/studies/{item['study_id']}/runs",
+        json={"arm_id": "baseline"}, headers={**_csrf(client), "Idempotency-Key": "cross-project"},
+    )
+    assert denied_submit.status_code == 404
 
 
 def test_ambiguous_study_post_requires_explicit_same_key_replay(

@@ -12,6 +12,7 @@ import { Card } from "../components/ui/card";
 import { EmptyState } from "../components/ui/empty-state";
 import { ErrorState } from "../components/ui/error-state";
 import { PageHeader } from "../components/shared/page-header";
+import { ResearchRunPanel } from "../components/research-run-panel";
 
 type Draft = {
   title: string;
@@ -101,6 +102,7 @@ export function ResearchWorkbenchPage() {
   const analyses = useProjectStudyAnalyses(projectId, selectedStudyId);
   const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
   const [armsJson, setArmsJson] = useState("[]");
+  const [protocolJson, setProtocolJson] = useState("");
   const [submissionKey, setSubmissionKey] = useState(newIdempotencyKey);
   const [previewPayload, setPreviewPayload] = useState<StudyRegistrationPayload | null>(null);
   const [lastPayload, setLastPayload] = useState<StudyRegistrationPayload | null>(null);
@@ -412,6 +414,34 @@ export function ResearchWorkbenchPage() {
                 <textarea rows={5} spellCheck={false} value={armsJson} onChange={(event) => { setArmsJson(event.target.value); setSubmissionKey(newIdempotencyKey()); setPreviewPayload(null); setLastPayload(null); }} className={`${inputClass} font-mono text-xs`} aria-describedby="arms-help" />
                 <span id="arms-help" className="text-[11px] leading-4 text-slate-500">每个实验臂需提供 arm_id、role、method_id、method_version。这里只登记计划，不会执行。</span>
               </Field>
+              <details className="min-w-0 sm:col-span-2">
+                <summary className="cursor-pointer text-xs font-medium text-brand-700">导入冻结研究配置</summary>
+                <p className="mt-2 text-xs text-slate-500">粘贴包含协议、模型版本、数据切分与实验臂的完整注册 JSON。确认前可查看完整正文；服务器仍会核验全部字段。</p>
+                <textarea aria-label="冻结研究配置 JSON" rows={6} maxLength={1048576}
+                  className={`${inputClass} font-mono text-xs`} value={protocolJson}
+                  onChange={(event) => {
+                    setProtocolJson(event.target.value);
+                    setPreviewPayload(null);
+                    setSubmissionKey(newIdempotencyKey());
+                  }} />
+                <Button variant="secondary" onClick={() => {
+                  try {
+                    const parsed: unknown = JSON.parse(protocolJson);
+                    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+                      throw new Error("注册配置必须是 JSON 对象。");
+                    }
+                    const value = parsed as Record<string, unknown>;
+                    if (typeof value.title !== "string" || typeof value.primary_outcome !== "string"
+                      || !Number.isInteger(value.planned_pairs) || !Number.isInteger(value.planned_case_families)) {
+                      throw new Error("配置需包含标题、主要结果变量和整数类型的计划样本数。");
+                    }
+                    setFormError(null);
+                    setPreviewPayload(parsed as StudyRegistrationPayload);
+                  } catch (error) {
+                    setFormError(error instanceof Error ? error.message : "JSON 配置无效。");
+                  }
+                }}>预览冻结配置</Button>
+              </details>
               {previewPayload && (
                 <section aria-label="不可变注册摘要" className="sm:col-span-2 rounded-md border border-brand-200 bg-brand-50/40 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -467,7 +497,7 @@ export function ResearchWorkbenchPage() {
           )}
         </Card>
 
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <Card title="项目 Study 列表" description={studies.data?.meta.source_note ?? "列表只读取 App 本地项目映射。"} action={<Badge variant="neutral">RECORDED</Badge>}>
             {studies.isLoading && <p className="text-sm text-slate-500">正在读取项目登记…</p>}
             {studies.error && (
@@ -480,7 +510,7 @@ export function ResearchWorkbenchPage() {
               <div className="space-y-2">
                 <p className="text-[11px] text-slate-500">共 {studies.data.total} 条项目登记</p>
                 {studies.data.items.map((item) => (
-                  <div key={`${item.study_id ?? "pending"}:${item.request_id}`} className="rounded-md border border-surface-border p-3">
+                  <div key={`${item.study_id ?? "pending"}:${item.request_id}`} className="min-w-0 rounded-md border border-surface-border p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="break-words text-sm font-medium text-slate-800">{item.title}</p>
@@ -510,22 +540,24 @@ export function ResearchWorkbenchPage() {
               {detail.data && (
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <Badge variant={modeVariant(detail.data.meta.data_mode)}>{detail.data.meta.data_mode.toUpperCase()}</Badge>
+                    <Badge variant={modeVariant(detail.data.meta.data_mode)}>登记通道 {detail.data.meta.data_mode.toUpperCase()}</Badge>
                     <span className="text-slate-500">AgentGuard <code className="font-mono">{detail.data.meta.agentguard_commit.slice(0, 7)}</code></span>
                     <span className="text-slate-500">注册 SHA-256 <code className="break-all font-mono">{detail.data.project_registration.registration_sha256}</code></span>
                   </div>
                   <pre className="max-h-72 overflow-auto rounded-md bg-slate-50 p-3 text-[10px] leading-5 text-slate-700">{pretty(detail.data.study)}</pre>
+                  <ResearchRunPanel key={`${projectId}:${selectedStudyId}`} projectId={projectId}
+                    studyId={selectedStudyId} study={detail.data.study} />
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-md border border-surface-border p-3">
+                    <div className="min-w-0 rounded-md border border-surface-border p-3">
                       <div className="flex items-center justify-between gap-2">
                         <h3 className="text-xs font-semibold text-slate-700">注册完整性</h3>
-                        {integrity.data && <Badge variant={integrity.data.integrity.integrity_status === "valid" ? "ok" : "warn"}>{String(integrity.data.integrity.integrity_status ?? "UNKNOWN")}</Badge>}
+                        {integrity.data && <Badge variant={integrity.data.integrity.integrity_valid === true || integrity.data.integrity.integrity_status === "valid" ? "ok" : "warn"}>{integrity.data.integrity.integrity_valid === true ? "VALID" : String(integrity.data.integrity.integrity_status ?? "UNKNOWN")}</Badge>}
                       </div>
                       {integrity.isLoading && <p className="mt-2 text-xs text-slate-500">读取中…</p>}
                       {integrity.data && <pre className="mt-2 max-h-32 overflow-auto text-[10px] text-slate-600">{pretty(integrity.data.integrity)}</pre>}
                       {integrity.error && <p className="mt-2 text-xs text-red-700">完整性信息不可用。</p>}
                     </div>
-                    <div className="rounded-md border border-surface-border p-3">
+                    <div className="min-w-0 rounded-md border border-surface-border p-3">
                       <h3 className="text-xs font-semibold text-slate-700">分析记录</h3>
                       {analyses.isLoading && <p className="mt-2 text-xs text-slate-500">读取中…</p>}
                       {analyses.data && analyses.data.items.length === 0 && <p className="mt-2 text-xs text-slate-500">上游没有返回分析记录；App 不生成替代结果。</p>}
@@ -542,9 +574,8 @@ export function ResearchWorkbenchPage() {
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
-                <p className="font-semibold">执行与分析门控仍关闭</p>
-                <p className="mt-1 leading-5">WARDEN Live Gate 尚未验证；没有已核验的真实执行器和工件内容来源。App 不开放 Run 执行或分析写入，RC5 的 measured 输入在工件验证前仍会被拒绝。</p>
-                <p className="mt-2 font-mono text-[10px]">合同来源 d85aa97 · HTTP Smoke NOT_RUN</p>
+                <p className="font-semibold">结果验收范围</p>
+                <p className="mt-1 leading-5">运行仅使用服务端登记的协议与实验臂。任务提交后需等待 Worker 执行和工件校验；每次运行单独显示来源与校验状态。M 轨道激活采集不代表完整通信或防御效果，缺少配对结果时分析保持不完整。</p>
               </div>
             </div>
           </div>
@@ -568,7 +599,7 @@ function Field({
   children: ReactNode;
 }) {
   return (
-    <label className={className ?? "block text-xs font-medium text-slate-700"}>
+    <label className={`block min-w-0 text-xs font-medium text-slate-700 ${className ?? ""}`}>
       {label}{required && <span className="ml-1 text-red-600" aria-label="必填">*</span>}
       {children}
     </label>

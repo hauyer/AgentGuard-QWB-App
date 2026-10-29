@@ -29,6 +29,7 @@ MAX_STUDY_REQUEST_BYTES = 1024 * 1024
 IDEMPOTENCY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
+
 # RC5's StudyRegistrationRequest uses additionalProperties=false. Keep this
 # allowlist aligned with that exact frozen schema; upstream remains authoritative
 # for the full value constraints and typed validation errors.
@@ -531,3 +532,53 @@ def project_study_analyses(
         },
         **report,
     }
+
+
+@router.post("/projects/{project_id}/studies/{study_id}/runs", response_model=None)
+def submit_project_study_run(
+    request: Request, project_id: int, study_id: str, client: ClientDep, user: AnalystCsrf,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
+    payload: Annotated[dict[str, Any], Body()],
+) -> dict | JSONResponse:
+    try:
+        require_project_access(request.app.state.settings, user, project_id, required_role="analyst")
+    except ProjectServiceError as exc:
+        return _error(exc.status_code, exc.code, str(exc))
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    if (set(payload) != {"arm_id"} or not isinstance(payload["arm_id"], str)
+            or not IDEMPOTENCY_PATTERN.fullmatch(payload["arm_id"])
+            or not IDEMPOTENCY_PATTERN.fullmatch(idempotency_key)):
+        return _error(422, "STUDY_RUN_INVALID", "只允许注册的实验臂及有效幂等键。")
+    try:
+        return client.submit_study_run(study_id, payload["arm_id"], idempotency_key)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+@router.get("/projects/{project_id}/studies/{study_id}/runs", response_model=None)
+def list_project_study_runs(
+    request: Request, project_id: int, study_id: str, client: ClientDep, user: Viewer,
+) -> dict | JSONResponse:
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    try:
+        return client.list_study_runs(study_id)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+@router.get("/projects/{project_id}/studies/{study_id}/runs/{workflow_id}", response_model=None)
+def get_project_study_run(
+    request: Request, project_id: int, study_id: str, workflow_id: str,
+    client: ClientDep, user: Viewer,
+) -> dict | JSONResponse:
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    try:
+        return client.get_study_run(study_id, workflow_id)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)

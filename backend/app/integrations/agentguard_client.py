@@ -461,6 +461,16 @@ class AgentGuardClient:
     def get_study(self, study_id: str) -> dict[str, Any]:
         return self.request("GET", f"/v1/studies/{_quote(study_id)}")
 
+    def submit_study_run(self, study_id: str, arm_id: str, key: str) -> dict[str, Any]:
+        return self.request("POST", f"/v1/studies/{_quote(study_id)}/runs",
+                            body={"arm_id": arm_id}, operator=True, idempotency_key=key)
+
+    def list_study_runs(self, study_id: str) -> dict[str, Any]:
+        return self.request("GET", f"/v1/studies/{_quote(study_id)}/runs")
+
+    def get_study_run(self, study_id: str, workflow_id: str) -> dict[str, Any]:
+        return self.request("GET", f"/v1/studies/{_quote(study_id)}/runs/{_quote(workflow_id)}")
+
     def get_study_integrity(self, study_id: str) -> dict[str, Any]:
         return self.request("GET", f"/v1/studies/{_quote(study_id)}/integrity")
 
@@ -572,6 +582,9 @@ class AgentGuardClient:
             "GET /v1/studies/{study_id}",
             "GET /v1/studies/{study_id}/integrity",
             "GET /v1/studies/{study_id}/analyses",
+            "GET /v1/studies/{study_id}/runs",
+            "POST /v1/studies/{study_id}/runs",
+            "GET /v1/studies/{study_id}/runs/{workflow_id}",
         ]
         try:
             response = self._http.get("/openapi.json")

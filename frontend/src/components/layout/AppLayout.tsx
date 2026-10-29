@@ -73,7 +73,7 @@ function dataModeLabel(mode: string): string {
 }
 
 function connectionStatusLabel(synthetic: boolean, reachable: boolean | undefined): string {
-  if (synthetic) return reachable ? "AgentGuard Stub 已连接" : "AgentGuard Stub 不可用";
+  if (synthetic) return reachable ? "通用审计测试后端已连接" : "通用审计测试后端不可用";
   if (reachable === undefined) return "检查连接";
   return reachable ? "AgentGuard 已连接" : "AgentGuard 不可用";
 }
@@ -215,7 +215,7 @@ export function AppLayout() {
               className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800"
             >
               <strong className="font-semibold">SYNTHETIC 数据源</strong>
-              <span>Stub 用于合同与流程验证，不代表真实 WARDEN、模型运行或实验结果。</span>
+              <span>通用审计使用测试后端，不代表真实 WARDEN、模型运行或实验结果；研究工作台中的独立任务以各自的运行来源和工件校验为准。</span>
             </div>
           )}
           <Outlet />

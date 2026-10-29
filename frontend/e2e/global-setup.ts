@@ -1,5 +1,5 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -59,13 +59,21 @@ function cleanRuntimeState() {
 }
 
 function startProcess(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): ChildProcess {
+  const logDirectory = resolve(frontendDir, "test-results/runtime");
+  mkdirSync(logDirectory, { recursive: true });
+  const label = args.some((arg) => arg.includes("vite")) ? "frontend" : "backend";
+  const log = openSync(resolve(logDirectory, `${label}.log`), "a");
   const child = spawn(command, args, {
     cwd,
     env,
-    detached: process.platform !== "win32",
-    stdio: "ignore",
+    // Keep Windows services alive when Playwright's setup worker exits.
+    // Teardown owns their PIDs and stops the entire process tree explicitly.
+    detached: true,
+    stdio: ["ignore", log, log],
     windowsHide: true,
   });
+  closeSync(log);
+  child.unref();
   return child;
 }
 
