@@ -5,9 +5,11 @@ export interface ExperimentEvent {
   message_id?: string | null; evidence_refs: string[]; data: Record<string, string | number | boolean | null>;
 }
 export interface AgentView {
+  protection_level?:number|null;
   id: string; label: string; role: string; status: string; source_event_ids: string[];
 }
 export interface MessageView {
+  assurance_level?:number|null;
   id: string; source: string; target: string; message_ids: string[]; channel_type: string;
   delivered_count: number; blocked_count: number; source_event_ids: string[];
 }

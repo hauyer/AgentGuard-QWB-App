@@ -24,8 +24,9 @@ from app.services.project_service import ProjectServiceError, require_project_ac
 
 router = APIRouter()
 
-AGENTGUARD_RC5_SOURCE = "0ef2b9e4752610d830324486c6cb4f02ebba8220"
+AGENTGUARD_RC5_SOURCE = "4cab48fc22bf7dd6f59b2ba0b2fc0368dfd5ebf0"
 MAX_STUDY_REQUEST_BYTES = 1024 * 1024
+OperatorCsrf = Annotated[AppUser, Depends(require_role_csrf("operator"))]
 IDEMPOTENCY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
@@ -726,3 +727,69 @@ def project_comparison(
         return client.get_study_comparison(study_id)
     except AgentGuardError as exc:
         return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+def _gsei_forward(request, project_id, study_id, client, user, method, resource, payload=None, query=None):
+    _, error = _project_link(request.app.state.settings, user, project_id, study_id)
+    if error:
+        return error
+    if method == "POST":
+        try:
+            require_project_access(request.app.state.settings, user, project_id,
+                                   required_role="analyst" if resource.endswith("preview") else "operator")
+        except ProjectServiceError as exc:
+            return _error(exc.status_code, exc.code, str(exc))
+        if request.query_params.get("mode") == "demo" or (payload or {}).get("mode") == "demo":
+            return _error(403, "DEMO_WRITE_FORBIDDEN", "示意场景不能写入真实研究。")
+    try:
+        from urllib.parse import quote
+        privileged = method == "POST" and (resource != "intervention-decisions/preview"
+                                           or user.role in {"operator", "admin"})
+        return client.request(method, f"/v1/studies/{quote(study_id, safe='')}/{resource}",
+                              body=payload, query=query, operator=privileged)
+    except AgentGuardError as exc:
+        return _error(exc.status_code or 502, exc.code, str(exc), exc.request_id)
+
+
+@router.get("/projects/{project_id}/studies/{study_id}/security-profile", response_model=None)
+def gsei_profiles(request: Request, project_id: int, study_id: str, client: ClientDep, user: Viewer):
+    return _gsei_forward(request, project_id, study_id, client, user, "GET", "security-profile")
+
+
+@router.post("/projects/{project_id}/studies/{study_id}/security-profile", response_model=None)
+def gsei_profile_write(request: Request, project_id: int, study_id: str, client: ClientDep,
+                       user: OperatorCsrf, payload: Annotated[dict[str, Any], Body()]):
+    return _gsei_forward(request, project_id, study_id, client, user, "POST", "security-profile", payload)
+
+
+@router.post("/projects/{project_id}/studies/{study_id}/value-events", response_model=None)
+def gsei_event_write(request: Request, project_id: int, study_id: str, client: ClientDep,
+                     user: OperatorCsrf, payload: Annotated[dict[str, Any], Body()],
+                     workflow_id: str, profile_artifact_id: str):
+    return _gsei_forward(request, project_id, study_id, client, user, "POST", "value-events", payload,
+                         {"workflow_id": workflow_id, "profile_artifact_id": profile_artifact_id})
+
+
+@router.post("/projects/{project_id}/studies/{study_id}/intervention-decisions/preview", response_model=None)
+def gsei_preview(request: Request, project_id: int, study_id: str, client: ClientDep,
+                  user: AnalystCsrf, payload: Annotated[dict[str, Any], Body()]):
+    return _gsei_forward(request, project_id, study_id, client, user, "POST", "intervention-decisions/preview", payload)
+
+
+@router.get("/projects/{project_id}/studies/{study_id}/intervention-decisions/{decision_id}", response_model=None)
+def gsei_decision(request: Request, project_id: int, study_id: str, decision_id: str, client: ClientDep, user: Viewer):
+    if not SHA256_PATTERN.fullmatch(decision_id):
+        return _error(422, "DECISION_ID_INVALID", "决策引用必须是SHA256。")
+    return _gsei_forward(request, project_id, study_id, client, user, "GET", f"intervention-decisions/{decision_id}")
+
+
+@router.post(
+    "/projects/{project_id}/studies/{study_id}/intervention-decisions/{decision_id}/execute", response_model=None,
+)
+def gsei_execute(request: Request, project_id: int, study_id: str, decision_id: str, client: ClientDep,
+                  user: OperatorCsrf, payload: Annotated[dict[str, Any], Body()]):
+    if (not SHA256_PATTERN.fullmatch(decision_id) or "arm_id" not in payload
+            or set(payload) - {"arm_id", "paired_batch"}):
+        return _error(422, "DECISION_EXECUTION_INVALID", "执行只接受决策引用与冻结实验臂。")
+    return _gsei_forward(request, project_id, study_id, client, user, "POST",
+                         f"intervention-decisions/{decision_id}/execute", payload)

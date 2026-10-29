@@ -14,6 +14,7 @@ function AgentNode({data}:NodeProps<Node<AgentData>>) {
   return <div className={`observatory-node ${data.selectedAgent?"is-selected":""} ${isolated?"is-isolated":""} ${data.agent.status==="failed"?"is-failed":""} ${data.preview==="leace"||data.applied.includes("leace")?"has-erasure":""}`}>
     <Handle type="target" position={incoming}/><div className={`agent-mark role-${data.agent.role}`}>{isolated?"⊘":data.agent.label.slice(0,1)}</div>
     <div><strong>{data.agent.label}</strong><small>{data.preview?"预览 / 未运行":isolated?"已隔离":data.agent.status==="failed"?"执行失败":data.applied.includes("leace")?"LEACE · 已应用":data.applied.includes("activation_patch")?"Patch · 已应用":"运行观测"}</small></div>
+    <span className="gsei-node-level">{data.agent.protection_level?`S${data.agent.protection_level}`:"S 未配置"}</span>
     {(data.preview==="activation_patch"||data.applied.includes("activation_patch"))&&<span className="patch-glyph">＋</span>}
     <Handle type="source" position={outgoing}/>
   </div>;
@@ -86,7 +87,7 @@ export function AgentCanvas({graph,layoutGraph,selected,onSelect,probeLayer,mess
       :blocked?`阻断 ${edge.blocked_count} · 交付 ${edge.delivered_count}`:replaced?`替换 ${replaced} · 未匹配 ${noMatch}`:noMatch?"无匹配 · 未实际替换":`消息交付 ${edge.delivered_count}`;
     return {id:edge.id,type:"evidence",source:edge.source,target:edge.target,animated:playing&&!blocked&&edge.delivered_count>0,
       markerEnd:{type:MarkerType.ArrowClosed,color:blocked?"#f17f86":"#48c4d4"},
-      data:{observed:probes.length>0,passed:probes.some(p=>probeThreshold(p)===true),blocked,caption,probeCount:probes.length,passedCount:probes.filter(p=>probeThreshold(p)===true).length},
+      data:{observed:probes.length>0,passed:probes.some(p=>probeThreshold(p)===true),blocked,caption:`${edge.assurance_level?`Q${edge.assurance_level}`:"Q 未配置"} · ${caption}`,probeCount:probes.length,passedCount:probes.filter(p=>probeThreshold(p)===true).length},
       style:{stroke:blocked?"#f17f86":"#48c4d4",strokeWidth:selected===edge.id?3:1.8,
         strokeDasharray:blocked?"7 6":edge.delivered_count===0?"4 5":undefined}};
   }):[];

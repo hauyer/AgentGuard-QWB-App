@@ -14,6 +14,7 @@ import { useWorkspaceChrome } from "../components/layout/workspace-context";
 import { useAuthStore } from "../stores/auth-store";
 import { ResearchWorkbenchPage } from "./ResearchWorkbenchPage";
 import { AgentCanvas } from "../features/observatory/AgentCanvas";
+import {GradedDecisionPanel, type SecurityProfileView} from "../features/observatory/GradedDecisionPanel";
 import { PairedRunReplay } from "../features/observatory/PairedRunReplay";
 import { createDemoView } from "../features/observatory/demo";
 import { atSequence, eventSelection, probeThreshold, METRIC_NAMES, METHOD_NAMES, parseExperimentView, parseComparisonView, type ComparisonView, type ExperimentView } from "../features/observatory/model";
@@ -106,6 +107,10 @@ export function ObservatoryPage({desk="home"}:{desk?:Desk}) {
 
 function Workspace({desk,view,projectId,studyId,study,isDemo,onSubmitted,query}:{desk:Desk;view?:ExperimentView;projectId:number;studyId:string;study:Record<string,unknown>|null;isDemo:boolean;onSubmitted:(id:string)=>void;query:string}) {
   const [selected,setSelected]=useState("");const [probeLayer,setProbeLayer]=useState(true);const [messageLayer,setMessageLayer]=useState(true);
+  const securityBase=`/projects/${projectId}/studies/${encodeURIComponent(studyId)}`;
+  const [profileId,setProfileId]=useState("");
+  const profiles=useQuery({queryKey:["gsei-profiles",securityBase],queryFn:({signal})=>apiGet<{items:SecurityProfileView[]}>(`${securityBase}/security-profile`,signal),enabled:!isDemo&&!!studyId&&!!view});
+  const profile=profiles.data?.items.find(p=>p.artifact_id===profileId)?.profile;
   const [cursor,setCursor]=useState<number|null>(null);const [playing,setPlaying]=useState(false);const [rate,setRate]=useState(1);
   const [methodChoice,setMethod]=useState("");
   const observedArm=view?.events[0]?.arm_id??"";
@@ -164,12 +169,13 @@ function Workspace({desk,view,projectId,studyId,study,isDemo,onSubmitted,query}:
   };
   return <>
     {desk==="home"&&<div className="experiment-story"><div><span className="step-number">01</span><strong>重建通信事实</strong><small>以真实消息事件生成有向拓扑</small></div><ChevronRight/><div><span className="step-number">02</span><strong>检视表示证据</strong><small>Probe 只陈述线性可解码性</small></div><ChevronRight/><div><span className="step-number">03</span><strong>干预与验证</strong><small>比较配对行为与正常任务效用</small></div><Link className="primary-button" to={`/detection${query}`}>开始检测<ArrowRight size={14}/></Link><Link className="quiet-button" to={`/intervention-lab${query}`}>进入干预实验</Link><Link className="quiet-button" to={`/analysis${query}`}>查看结果</Link></div>}
+    {!isDemo&&view&&["detection","intervention"].includes(desk)&&<details className="gsei-disclosure"><summary>节点保护、通道保障与四层干预决策</summary><GradedDecisionPanel key={`${view.workflow_id}:${selected}`} base={securityBase} view={view} selected={selected} profiles={profiles.data?.items??[]} profileId={profileId} onProfile={setProfileId} onSubmitted={onSubmitted}/></details>}
     <div className={`observatory-workspace ${desk==="intervention"?"with-methods":""}`}>
       {desk==="intervention"&&<section className="stego-panel method-panel"><header><Shield size={15}/><h2>干预条件</h2><span>04 层级方法</span></header><div className="method-list">{["agent_isolation","message_block","message_replace","leace","activation_patch"].map(id=><button key={id} className={method===id?"selected":""} onClick={()=>{setMethod(id);setPreview(false);setTarget("");}}><span className="method-radio"/>{METHOD_NAMES[id]}<small>{id.startsWith("message_")?"作用于实际消息信道":id==="agent_isolation"?"跳过目标策略调用":"作用于 Agent 内部表示"}</small></button>)}</div><div className="method-explainer"><strong>预览 ≠ 应用 ≠ 有效</strong><p>只有执行事件支持“已应用”，配对行为和负对照才支持效果解释。</p><p>Path Patching：UNSUPPORTED</p></div></section>}
       <section className="stego-panel graph-panel"><header><Network size={16}/><h2>{desk==="intervention"?"干预前后 · 稳定拓扑":"Agent 通信拓扑"}</h2><span className="graph-count">{graph?.nodes.length??0} AGENTS</span><button className="icon-button" aria-label="导出公开视图" onClick={exportView} disabled={!view}><Download size={14}/></button></header>
         <div className="graph-toolbar"><div className="segmented"><button className={messageLayer?"active":""} onClick={()=>setMessageLayer(!messageLayer)}>通信层</button><button className={probeLayer?"active":""} onClick={()=>setProbeLayer(!probeLayer)}>Probe 证据</button></div><label className="graph-search"><Search size={13}/><input aria-label="搜索 Agent" placeholder="查找 Agent" value={search} onChange={event=>setSearch(event.target.value)}/></label><button className="quiet-button inspector-toggle" onClick={()=>setInspector(true)}>检视器</button></div>
         <div className="graph-coordinate"><span>事件重放 / SEQ {seq.toString().padStart(2,"0")}</span><span className={preview?"amber":""}>{preview?"PREVIEW · 未运行":isDemo?"DEMO · 非实测":graph?.evidence_status==="verified"?"已核验事件":"无通信事件"}</span></div>
-        <AgentCanvas graph={graph??emptyGraph} layoutGraph={view?.graph??emptyGraph} selected={selected} onSelect={select} probeLayer={probeLayer} messageLayer={messageLayer} preview={preview?method:""} target={actualTarget} playing={playing} search={search}/>
+        <AgentCanvas graph={{...(graph??emptyGraph),nodes:(graph??emptyGraph).nodes.map(n=>({...n,protection_level:profile?.nodes.find(s=>s.agent_id===n.id)?.protection_level??null})),communication_edges:(graph??emptyGraph).communication_edges.map(e=>({...e,assurance_level:profile?.channels.find(q=>q.edge_id===e.id)?.assurance_level??null}))}} layoutGraph={view?.graph??emptyGraph} selected={selected} onSelect={select} probeLayer={probeLayer} messageLayer={messageLayer} preview={preview?method:""} target={actualTarget} playing={playing} search={search}/>
         {isDemo&&<div className="demo-watermark">DEMO / NON-MEASURED</div>}
         <div className="graph-bottom-note"><FileCheck2 size={13}/>{view?.unavailable_reason?"此运行没有已记录的通信事件，系统不会推断消息边。":"通信边来自发送与交付事实；紫色只表示 Probe 线性证据。"}</div>
       </section>

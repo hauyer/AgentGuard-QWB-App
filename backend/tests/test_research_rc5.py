@@ -272,3 +272,27 @@ def test_execution_contract_is_read_only_and_requires_project_ownership(live_pro
     assert calls == [(study_id, "baseline")]
     assert client.get(base.replace(f"projects/{project_id}", "projects/999999")).status_code == 404
     assert calls == [(study_id, "baseline")]
+
+
+def test_gsei_write_csrf_scope_and_no_arbitrary_execution_payload(live_project_env, monkeypatch):
+    client, _, login = live_project_env
+    login()
+    project_id = _project_id(client)
+    created = client.post(f"/api/projects/{project_id}/studies", json=_registration(),
+                          headers={**_csrf(client), "Idempotency-Key": "gsei-security-boundary"})
+    study = created.json()["submission"]["study_id"]
+    calls = []
+    monkeypatch.setattr(AgentGuardClient, "request",
+                        lambda self, *args, **kwargs: calls.append((args, kwargs)) or {"items": []})
+    base = f"/api/projects/{project_id}/studies/{study}"
+    assert client.post(base+"/security-profile", json={}).status_code == 403
+    assert not calls
+    assert client.get(base+"/security-profile").status_code == 200
+    count = len(calls)
+    assert client.get(base.replace(f"projects/{project_id}", "projects/999999")+"/security-profile").status_code == 404
+    assert len(calls) == count
+    url = base+"/intervention-decisions/"+"a"*64+"/execute"
+    assert client.post(url, json={"arm_id": "leace", "hook": "arbitrary"}, headers=_csrf(client)).status_code == 422
+    assert len(calls) == count
+    assert client.post(base+"/security-profile?mode=demo", json={}, headers=_csrf(client)).status_code == 403
+    assert len(calls) == count
